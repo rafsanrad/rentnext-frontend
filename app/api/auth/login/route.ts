@@ -54,7 +54,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: "Unable to connect to the authentication server.",
+        message:
+          "Unable to connect to the authentication server.",
       },
       {
         status: 500,
