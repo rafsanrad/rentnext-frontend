@@ -1,10 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-import { apiFetch } from "@/lib/api";
 
 interface LoginResponse {
   success: boolean;
@@ -23,8 +20,6 @@ interface LoginResponse {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -66,43 +61,55 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
 
-      const response = await apiFetch<LoginResponse>(
-        "/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            email: formData.email.trim(),
-            password: formData.password,
-          }),
-        }
-      );
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          password: formData.password,
+        }),
+      });
 
-      if (!response.success) {
+      const data: LoginResponse = await response.json();
+
+      if (!response.ok || !data.success) {
         throw new Error(
-          response.message || "Login failed."
+          data.message || "Login failed."
         );
       }
 
-      localStorage.setItem(
-        "rentnest_token",
-        response.data.token
+      setSuccess(
+        "Login successful! Redirecting..."
       );
 
-      localStorage.setItem(
-        "rentnest_user",
-        JSON.stringify(response.data.user)
-      );
+      /*
+       * The JWT is now stored inside an
+       * HttpOnly cookie by the Next.js API route.
+       *
+       * We intentionally DO NOT store the JWT
+       * in localStorage anymore.
+       */
 
-      setSuccess("Login successful! Redirecting...");
+      const role = data.data.user.role;
 
-      window.location.href = "/properties";
+      if (role === "ADMIN") {
+        window.location.href = "/admin/dashboard";
+      } else if (role === "LANDLORD") {
+        window.location.href = "/landlord/dashboard";
+      } else {
+        window.location.href = "/tenant/dashboard";
+      }
     } catch (err) {
+      console.error("Login error:", err);
+
       setError(
         err instanceof Error
           ? err.message
           : "Invalid email or password."
       );
-    } finally {
+
       setIsLoading(false);
     }
   };
@@ -111,6 +118,7 @@ export default function LoginPage() {
     <main className="min-h-[calc(100vh-4rem)] bg-slate-50 px-4 py-10">
       <div className="mx-auto w-full max-w-md">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          {/* Header */}
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-slate-900">
               Welcome back
@@ -121,19 +129,26 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Error */}
           {error && (
             <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
+          {/* Success */}
           {success && (
             <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
               {success}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Form */}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
+            {/* Email */}
             <div>
               <label
                 htmlFor="email"
@@ -155,6 +170,7 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* Password */}
             <div>
               <label
                 htmlFor="password"
@@ -176,15 +192,19 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* Login Button */}
             <button
               type="submit"
               disabled={isLoading}
               className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isLoading ? "Logging in..." : "Login"}
+              {isLoading
+                ? "Logging in..."
+                : "Login"}
             </button>
           </form>
 
+          {/* Register */}
           <div className="mt-6 text-center text-sm text-slate-600">
             Do not have an account?{" "}
             <Link
