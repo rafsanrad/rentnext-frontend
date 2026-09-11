@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000/api";
+  "https://rentnest-backend-umber.vercel.app/api";
 
 const PUBLIC_ROUTES = [
   "/",
