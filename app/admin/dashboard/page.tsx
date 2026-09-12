@@ -1180,7 +1180,7 @@ export default function AdminDashboard() {
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[800px] text-left text-sm">
+                  <table className="w-full min-w-200 text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50">
                       <tr>
                         <th className="px-5 py-4 font-semibold">
@@ -1626,7 +1626,7 @@ export default function AdminDashboard() {
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left text-sm">
+                  <table className="w-full min-w-225 text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50">
                       <tr>
                         <th className="px-5 py-4 font-semibold">

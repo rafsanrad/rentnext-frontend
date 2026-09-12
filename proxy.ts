@@ -130,8 +130,8 @@ export async function proxy(request: NextRequest) {
 
     const user = data.data;
 
-    console.log("PROXY USER:", user);
-console.log("PROXY ROLE:", user?.role);
+//     console.log("PROXY USER:", user);
+// console.log("PROXY ROLE:", user?.role);
 
     /*
      * If a logged-in user tries to visit
