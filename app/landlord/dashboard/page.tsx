@@ -1,22 +1,42 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  RefreshCw,
+  LogOut,
+  Home,
+  Users,
+  Clock,
+  CheckCircle,
+  XCircle,
+  MapPin,
+  BedDouble,
+  Bath,
+  DollarSign,
+  Search,
+  Loader2,
+} from "lucide-react";
+
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000/api";
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
-  phone?: string | null;
-  address?: string | null;
+  role?: string;
 }
 
 interface Category {
   id: string;
   name: string;
-  description?: string;
-  createdAt?: string;
 }
 
 interface Property {
@@ -24,18 +44,16 @@ interface Property {
   title: string;
   description: string;
   location: string;
-  price: number | string;
+  price: number;
   propertyType: string;
   bedrooms: number;
   bathrooms: number;
   amenities: string[];
   imageUrl?: string | null;
   status: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
-  landlordId?: string;
   categoryId: string;
   category?: Category;
   createdAt?: string;
-  updatedAt?: string;
 }
 
 interface Tenant {
@@ -52,43 +70,25 @@ interface Payment {
 
 interface RentalRequest {
   id: string;
+  status:
+    | "PENDING"
+    | "APPROVED"
+    | "REJECTED"
+    | "CANCELLED"
+    | "ACTIVE"
+    | "COMPLETED";
   moveInDate: string;
   message?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   createdAt: string;
+  tenant: Tenant;
   property: {
     id: string;
     title: string;
     location: string;
-    price: number | string;
-    status: string;
+    price: number;
+    status?: string;
   };
-  tenant: Tenant;
   payment?: Payment | null;
-}
-
-interface MeResponse {
-  success: boolean;
-  message: string;
-  data: User;
-}
-
-interface RentalRequestsResponse {
-  success: boolean;
-  message: string;
-  data: RentalRequest[];
-}
-
-interface PropertiesResponse {
-  success: boolean;
-  message: string;
-  data: Property[];
-}
-
-interface CategoriesResponse {
-  success: boolean;
-  message: string;
-  data: Category[];
 }
 
 interface PropertyFormData {
@@ -105,193 +105,286 @@ interface PropertyFormData {
   status: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
 }
 
-const initialFormData: PropertyFormData = {
+interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+const emptyForm: PropertyFormData = {
   title: "",
   description: "",
   location: "",
   price: "",
   propertyType: "",
-  bedrooms: "1",
-  bathrooms: "1",
+  bedrooms: "",
+  bathrooms: "",
   amenities: "",
   imageUrl: "",
   categoryId: "",
   status: "AVAILABLE",
 };
 
-async function fetchUser(): Promise<User> {
+const getAuthHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const token = localStorage.getItem("accessToken");
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+const getErrorMessage = async (
+  response: Response,
+  fallback: string
+): Promise<string> => {
+  try {
+    const data = await response.json();
+
+    return data?.message || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const fetchUser = async (): Promise<User> => {
   const response = await fetch("/api/auth/me", {
-    method: "GET",
+    headers: {
+      ...getAuthHeaders(),
+    },
     cache: "no-store",
   });
 
-  const data: MeResponse = await response.json();
-
-  if (!response.ok || !data.success) {
+  if (!response.ok) {
     throw new Error(
-      data.message || "Unable to load user information."
+      await getErrorMessage(
+        response,
+        "Failed to load user information"
+      )
     );
   }
+
+  const data: ApiResponse<User> = await response.json();
 
   return data.data;
-}
+};
 
-async function fetchRentalRequests(): Promise<RentalRequest[]> {
-  const response = await fetch("/api/landlord/rental-requests", {
-    method: "GET",
-    cache: "no-store",
-  });
+const fetchMyProperties = async (): Promise<Property[]> => {
+  const response = await fetch(
+    `${API_URL}/landlord/properties`,
+    {
+      headers: {
+        ...getAuthHeaders(),
+      },
+      cache: "no-store",
+    }
+  );
 
-  const data: RentalRequestsResponse = await response.json();
-
-  if (!response.ok || !data.success) {
+  if (!response.ok) {
     throw new Error(
-      data.message || "Unable to load rental requests."
+      await getErrorMessage(
+        response,
+        "Failed to load properties"
+      )
     );
   }
 
-  return data.data || [];
-}
+  const data: ApiResponse<Property[]> =
+    await response.json();
 
-async function fetchMyProperties(): Promise<Property[]> {
-  const response = await fetch("/api/landlord/properties", {
-    method: "GET",
+  return data.data || [];
+};
+
+const fetchRentalRequests =
+  async (): Promise<RentalRequest[]> => {
+    const response = await fetch(
+      `${API_URL}/landlord/rental-requests`,
+      {
+        headers: {
+          ...getAuthHeaders(),
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        await getErrorMessage(
+          response,
+          "Failed to load rental requests"
+        )
+      );
+    }
+
+    const data: ApiResponse<RentalRequest[]> =
+      await response.json();
+
+    return data.data || [];
+  };
+
+const fetchCategories = async (): Promise<Category[]> => {
+  const response = await fetch(`${API_URL}/categories`, {
     cache: "no-store",
   });
 
-  const data: PropertiesResponse = await response.json();
-
-  if (!response.ok || !data.success) {
+  if (!response.ok) {
     throw new Error(
-      data.message || "Unable to load your properties."
+      await getErrorMessage(
+        response,
+        "Failed to load categories"
+      )
     );
   }
 
+  const data: ApiResponse<Category[]> =
+    await response.json();
+
   return data.data || [];
-}
+};
 
-async function fetchCategories(): Promise<Category[]> {
-  const apiUrl =
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000/api";
+const formatPrice = (price: number) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(price);
+};
 
-  const response = await fetch(`${apiUrl}/categories`, {
-    method: "GET",
-    cache: "no-store",
+const formatDate = (date: string) => {
+  if (!date) return "N/A";
+
+  return new Date(date).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
+};
 
-  const data: CategoriesResponse = await response.json();
+export default function LandlordDashboard() {
+  const queryClient = useQueryClient();
 
-  if (!response.ok || !data.success) {
-    throw new Error(
-      data.message || "Unable to load categories."
-    );
-  }
-
-  return data.data || [];
-}
-
-export default function LandlordDashboardPage() {
-  const [actionLoadingId, setActionLoadingId] =
-    useState<string | null>(null);
-
-  const [propertyActionLoading, setPropertyActionLoading] =
+  const [showPropertyModal, setShowPropertyModal] =
     useState(false);
-
-  const [successMessage, setSuccessMessage] = useState("");
-
-  const [propertyError, setPropertyError] = useState("");
-
-  const [showPropertyForm, setShowPropertyForm] = useState(false);
 
   const [editingProperty, setEditingProperty] =
     useState<Property | null>(null);
 
   const [formData, setFormData] =
-    useState<PropertyFormData>(initialFormData);
+    useState<PropertyFormData>(emptyForm);
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+
+  const [actionLoading, setActionLoading] =
+    useState<string | null>(null);
+
+  const [message, setMessage] = useState("");
+
+  const [error, setError] = useState("");
 
   const {
     data: user,
-    isLoading: isUserLoading,
-    error: userError,
+    isLoading: userLoading,
+    isError: userError,
   } = useQuery({
     queryKey: ["landlord-user"],
     queryFn: fetchUser,
-  });
-
-  const {
-    data: rentalRequests = [],
-    isLoading: isRequestsLoading,
-    error: requestsError,
-    refetch: refetchRentalRequests,
-  } = useQuery({
-    queryKey: ["landlord-rental-requests"],
-    queryFn: fetchRentalRequests,
+    retry: false,
   });
 
   const {
     data: properties = [],
-    isLoading: isPropertiesLoading,
-    error: propertiesError,
+    isLoading: propertiesLoading,
+    isError: propertiesError,
     refetch: refetchProperties,
   } = useQuery({
     queryKey: ["landlord-properties"],
     queryFn: fetchMyProperties,
+    retry: false,
+  });
+
+  const {
+    data: rentalRequests = [],
+    isLoading: requestsLoading,
+    isError: requestsError,
+    refetch: refetchRequests,
+  } = useQuery({
+    queryKey: ["landlord-rental-requests"],
+    queryFn: fetchRentalRequests,
+    retry: false,
   });
 
   const {
     data: categories = [],
-    isLoading: isCategoriesLoading,
-    error: categoriesError,
+    isLoading: categoriesLoading,
   } = useQuery({
     queryKey: ["property-categories"],
     queryFn: fetchCategories,
+    retry: false,
   });
 
-  const isInitialLoading =
-    isUserLoading ||
-    isRequestsLoading ||
-    isPropertiesLoading ||
-    isCategoriesLoading;
+  const visibleRentalRequests = useMemo(() => {
+    const completedPropertyIds = new Set(
+      rentalRequests
+        .filter(
+          (request) => request.status === "COMPLETED"
+        )
+        .map((request) => request.property.id)
+    );
 
-  const error =
-    userError?.message ||
-    requestsError?.message ||
-    propertiesError?.message ||
-    categoriesError?.message ||
-    "";
+    return rentalRequests.filter((request) => {
+      if (request.status === "COMPLETED") {
+        return true;
+      }
 
-  // Cancelled requests are hidden from landlord dashboard
-  const activeRequests = useMemo(
-    () =>
-      rentalRequests.filter(
-        (request) => request.status !== "CANCELLED"
-      ),
-    [rentalRequests]
-  );
+      if (request.status === "CANCELLED") {
+        return false;
+      }
+
+      if (
+        completedPropertyIds.has(
+          request.property.id
+        )
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [rentalRequests]);
+
+  const filteredProperties = useMemo(() => {
+    const value = searchTerm.trim().toLowerCase();
+
+    if (!value) {
+      return properties;
+    }
+
+    return properties.filter((property) => {
+      return (
+        property.title.toLowerCase().includes(value) ||
+        property.location.toLowerCase().includes(value) ||
+        property.propertyType
+          .toLowerCase()
+          .includes(value)
+      );
+    });
+  }, [properties, searchTerm]);
 
   const pendingRequests = useMemo(
     () =>
-      activeRequests.filter(
+      visibleRentalRequests.filter(
         (request) => request.status === "PENDING"
       ),
-    [activeRequests]
-  );
-
-  const approvedRequests = useMemo(
-    () =>
-      activeRequests.filter(
-        (request) => request.status === "APPROVED"
-      ),
-    [activeRequests]
-  );
-
-  const rejectedRequests = useMemo(
-    () =>
-      activeRequests.filter(
-        (request) => request.status === "REJECTED"
-      ),
-    [activeRequests]
+    [visibleRentalRequests]
   );
 
   const availableProperties = useMemo(
@@ -310,50 +403,71 @@ export default function LandlordDashboardPage() {
     [properties]
   );
 
-  const resetPropertyForm = () => {
-    setFormData(initialFormData);
-    setEditingProperty(null);
-    setShowPropertyForm(false);
-    setPropertyError("");
+  const clearMessages = () => {
+    setMessage("");
+    setError("");
   };
 
-  const openAddPropertyForm = () => {
-    setEditingProperty(null);
+  const refreshDashboard = async () => {
+    clearMessages();
 
-    setFormData({
-      ...initialFormData,
-      categoryId:
-        categories.length > 0 ? categories[0].id : "",
-    });
-
-    setPropertyError("");
-    setSuccessMessage("");
-    setShowPropertyForm(true);
+    try {
+      await Promise.all([
+        refetchProperties(),
+        refetchRequests(),
+      ]);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to refresh dashboard."
+      );
+    }
   };
 
-  const openEditPropertyForm = (property: Property) => {
+  const openAddPropertyModal = () => {
+    setEditingProperty(null);
+    setFormData(emptyForm);
+    clearMessages();
+    setShowPropertyModal(true);
+  };
+
+  const openEditPropertyModal = (
+    property: Property
+  ) => {
     setEditingProperty(property);
 
     setFormData({
-      title: property.title,
-      description: property.description,
-      location: property.location,
-      price: String(property.price),
-      propertyType: property.propertyType,
-      bedrooms: String(property.bedrooms),
-      bathrooms: String(property.bathrooms),
-      amenities: property.amenities?.join(", ") || "",
+      title: property.title || "",
+      description: property.description || "",
+      location: property.location || "",
+      price: String(property.price ?? ""),
+      propertyType: property.propertyType || "",
+      bedrooms: String(property.bedrooms ?? ""),
+      bathrooms: String(property.bathrooms ?? ""),
+      amenities: Array.isArray(property.amenities)
+        ? property.amenities.join(", ")
+        : "",
       imageUrl: property.imageUrl || "",
-      categoryId: property.categoryId,
-      status: property.status,
+      categoryId: property.categoryId || "",
+      status: property.status || "AVAILABLE",
     });
 
-    setPropertyError("");
-    setSuccessMessage("");
-    setShowPropertyForm(true);
+    clearMessages();
+    setShowPropertyModal(true);
   };
 
-  const handleFormChange = (
+  const closePropertyModal = () => {
+    if (submitting) {
+      return;
+    }
+
+    setShowPropertyModal(false);
+    setEditingProperty(null);
+    setFormData(emptyForm);
+  };
+
+  const handleInputChange = (
     field: keyof PropertyFormData,
     value: string
   ) => {
@@ -368,211 +482,240 @@ export default function LandlordDashboardPage() {
   ) => {
     event.preventDefault();
 
+    clearMessages();
+
+    if (!formData.title.trim()) {
+      setError("Property title is required.");
+      return;
+    }
+
+    if (!formData.description.trim()) {
+      setError("Property description is required.");
+      return;
+    }
+
+    if (!formData.location.trim()) {
+      setError("Property location is required.");
+      return;
+    }
+
+    if (!formData.price || Number(formData.price) <= 0) {
+      setError("Please enter a valid price.");
+      return;
+    }
+
+    if (!formData.propertyType.trim()) {
+      setError("Property type is required.");
+      return;
+    }
+
+    if (
+      formData.bedrooms === "" ||
+      Number(formData.bedrooms) < 0
+    ) {
+      setError("Please enter a valid number of bedrooms.");
+      return;
+    }
+
+    if (
+      formData.bathrooms === "" ||
+      Number(formData.bathrooms) < 0
+    ) {
+      setError("Please enter a valid number of bathrooms.");
+      return;
+    }
+
+    if (!formData.categoryId) {
+      setError("Please select a category.");
+      return;
+    }
+
+    const token = localStorage.getItem("accessToken");
+
+    if (!token) {
+      setError(
+        "Authentication token not found. Please login again."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+
     try {
-      setPropertyActionLoading(true);
-      setPropertyError("");
-      setSuccessMessage("");
-
-      if (!formData.title.trim()) {
-        throw new Error("Property title is required.");
-      }
-
-      if (!formData.description.trim()) {
-        throw new Error("Property description is required.");
-      }
-
-      if (!formData.location.trim()) {
-        throw new Error("Property location is required.");
-      }
-
-      const price = Number(formData.price);
-      const bedrooms = Number(formData.bedrooms);
-      const bathrooms = Number(formData.bathrooms);
-
-      if (!Number.isFinite(price) || price <= 0) {
-        throw new Error("Please enter a valid price.");
-      }
-
-      if (!Number.isInteger(bedrooms) || bedrooms < 0) {
-        throw new Error(
-          "Please enter a valid number of bedrooms."
-        );
-      }
-
-      if (!Number.isInteger(bathrooms) || bathrooms < 0) {
-        throw new Error(
-          "Please enter a valid number of bathrooms."
-        );
-      }
-
-      if (!formData.propertyType.trim()) {
-        throw new Error("Property type is required.");
-      }
-
-      if (!formData.categoryId) {
-        throw new Error("Please select a category.");
-      }
-
-      const amenities = formData.amenities
-        .split(",")
-        .map((amenity) => amenity.trim())
-        .filter(Boolean);
-
-      if (amenities.length === 0) {
-        throw new Error("Please add at least one amenity.");
-      }
-
-      const payload: {
-        title: string;
-        description: string;
-        location: string;
-        price: number;
-        propertyType: string;
-        bedrooms: number;
-        bathrooms: number;
-        amenities: string[];
-        imageUrl?: string;
-        categoryId: string;
-        status?: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
-      } = {
+      const payload = {
         title: formData.title.trim(),
         description: formData.description.trim(),
         location: formData.location.trim(),
-        price,
+        price: Number(formData.price),
         propertyType: formData.propertyType.trim(),
-        bedrooms,
-        bathrooms,
-        amenities,
+        bedrooms: Number(formData.bedrooms),
+        bathrooms: Number(formData.bathrooms),
+        amenities: formData.amenities
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        imageUrl: formData.imageUrl.trim() || undefined,
         categoryId: formData.categoryId,
+        ...(editingProperty
+          ? {
+              status: formData.status,
+            }
+          : {}),
       };
 
-      if (formData.imageUrl.trim()) {
-        payload.imageUrl = formData.imageUrl.trim();
-      }
-
-      if (editingProperty) {
-        payload.status = formData.status;
-      }
-
-      const endpoint = editingProperty
-        ? `/api/landlord/properties/${editingProperty.id}`
-        : "/api/landlord/properties";
+      const url = editingProperty
+        ? `${API_URL}/landlord/properties/${editingProperty.id}`
+        : `${API_URL}/landlord/properties`;
 
       const method = editingProperty ? "PATCH" : "POST";
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!response.ok) {
         throw new Error(
-          data.message ||
-            `Unable to ${
-              editingProperty ? "update" : "create"
-            } property.`
+          await getErrorMessage(
+            response,
+            editingProperty
+              ? "Failed to update property"
+              : "Failed to create property"
+          )
         );
       }
 
-      setSuccessMessage(
-        editingProperty
-          ? "Property updated successfully."
-          : "Property created successfully."
+      const data = await response.json();
+
+      setMessage(
+        data.message ||
+          (editingProperty
+            ? "Property updated successfully."
+            : "Property created successfully.")
       );
 
-      resetPropertyForm();
+      await queryClient.invalidateQueries({
+        queryKey: ["landlord-properties"],
+      });
 
-      await refetchProperties();
-    } catch (error) {
-      console.error("Property form error:", error);
-
-      setPropertyError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save property."
+      setShowPropertyModal(false);
+      setEditingProperty(null);
+      setFormData(emptyForm);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong."
       );
     } finally {
-      setPropertyActionLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleDeleteProperty = async (property: Property) => {
+  const handleDeleteProperty = async (
+    propertyId: string
+  ) => {
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${property.title}"? This action cannot be undone.`
+      "Are you sure you want to delete this property?"
     );
 
     if (!confirmed) {
       return;
     }
 
-    try {
-      setPropertyActionLoading(true);
-      setPropertyError("");
-      setSuccessMessage("");
+    clearMessages();
 
+    const token = localStorage.getItem("accessToken");
+
+    if (!token) {
+      setError(
+        "Authentication token not found. Please login again."
+      );
+      return;
+    }
+
+    setActionLoading(`delete-${propertyId}`);
+
+    try {
       const response = await fetch(
-        `/api/landlord/properties/${property.id}`,
+        `${API_URL}/landlord/properties/${propertyId}`,
         {
           method: "DELETE",
+          headers: {
+            ...getAuthHeaders(),
+          },
         }
       );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!response.ok) {
         throw new Error(
-          data.message || "Unable to delete property."
+          await getErrorMessage(
+            response,
+            "Failed to delete property"
+          )
         );
       }
 
-      setSuccessMessage(
-        "Property deleted successfully."
+      const data = await response.json();
+
+      setMessage(
+        data.message ||
+          "Property deleted successfully."
       );
 
-      await refetchProperties();
-    } catch (error) {
-      console.error("Delete property error:", error);
-
-      setPropertyError(
-        error instanceof Error
-          ? error.message
-          : "Unable to delete property."
+      await queryClient.invalidateQueries({
+        queryKey: ["landlord-properties"],
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete property."
       );
     } finally {
-      setPropertyActionLoading(false);
+      setActionLoading(null);
     }
   };
 
-  const handleStatusUpdate = async (
+  const handleRentalRequestStatus = async (
     requestId: string,
     status: "APPROVED" | "REJECTED"
   ) => {
-    const action =
-      status === "APPROVED" ? "approve" : "reject";
+    clearMessages();
+
+    const token = localStorage.getItem("accessToken");
+
+    if (!token) {
+      setError(
+        "Authentication token not found. Please login again."
+      );
+      return;
+    }
 
     const confirmed = window.confirm(
-      `Are you sure you want to ${action} this rental request?`
+      status === "APPROVED"
+        ? "Are you sure you want to approve this rental request?"
+        : "Are you sure you want to reject this rental request?"
     );
 
     if (!confirmed) {
       return;
     }
 
-    try {
-      setActionLoadingId(requestId);
-      setSuccessMessage("");
+    setActionLoading(`${status}-${requestId}`);
 
+    try {
       const response = await fetch(
-        `/api/landlord/rental-requests/${requestId}/status`,
+        `${API_URL}/landlord/rental-requests/${requestId}/status`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({
             status,
@@ -580,397 +723,327 @@ export default function LandlordDashboardPage() {
         }
       );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
+      if (!response.ok) {
         throw new Error(
-          data.message ||
-            `Unable to ${action} rental request.`
+          await getErrorMessage(
+            response,
+            `Failed to ${status.toLowerCase()} rental request`
+          )
         );
       }
 
-      setSuccessMessage(
-        status === "APPROVED"
-          ? "Rental request approved successfully."
-          : "Rental request rejected successfully."
+      const data = await response.json();
+
+      setMessage(
+        data.message ||
+          `Rental request ${status.toLowerCase()} successfully.`
       );
 
       await Promise.all([
-        refetchRentalRequests(),
-        refetchProperties(),
+        queryClient.invalidateQueries({
+          queryKey: ["landlord-rental-requests"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["landlord-properties"],
+        }),
       ]);
-    } catch (error) {
-      console.error(
-        "Rental request status update error:",
-        error
-      );
-
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : `Unable to ${action} rental request.`
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update rental request."
       );
     } finally {
-      setActionLoadingId(null);
+      setActionLoading(null);
     }
   };
 
+  /*
+   * Logout
+   *
+   * Important:
+   * - Remove localStorage authentication first.
+   * - Clear React Query cache.
+   * - Try to remove the httpOnly cookie through
+   *   the Next.js logout route.
+   * - Even if the logout API fails, redirect anyway.
+   */
   const handleLogout = async () => {
     try {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+
+      queryClient.clear();
+
       await fetch("/api/auth/logout", {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      }).catch(() => {
+        /*
+         * Ignore logout API failure.
+         * Local authentication is already cleared.
+         */
       });
-
-      window.location.href = "/auth/login";
-    } catch (error) {
-      console.error("Logout error:", error);
+    } finally {
+      window.location.replace("/auth/login");
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
+  const isLoading =
+    userLoading ||
+    propertiesLoading ||
+    requestsLoading ||
+    categoriesLoading;
 
-  const formatPrice = (price: number | string) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      maximumFractionDigits: 0,
-    }).format(Number(price));
-  };
-
-  const getStatusStyle = (
-    status: RentalRequest["status"]
-  ) => {
-    switch (status) {
-      case "PENDING":
-        return "bg-amber-50 text-amber-700 border-amber-200";
-
-      case "APPROVED":
-        return "bg-emerald-50 text-emerald-700 border-emerald-200";
-
-      case "REJECTED":
-        return "bg-red-50 text-red-700 border-red-200";
-
-      default:
-        return "bg-gray-100 text-gray-600 border-gray-200";
-    }
-  };
-
-  const getPropertyStatusStyle = (
-    status: Property["status"]
-  ) => {
-    switch (status) {
-      case "AVAILABLE":
-        return "bg-emerald-50 text-emerald-700 border-emerald-200";
-
-      case "RENTED":
-        return "bg-blue-50 text-blue-700 border-blue-200";
-
-      case "UNAVAILABLE":
-        return "bg-gray-100 text-gray-600 border-gray-200";
-
-      default:
-        return "bg-gray-100 text-gray-600 border-gray-200";
-    }
-  };
-
-  if (isInitialLoading) {
+  if (isLoading) {
     return (
-      <main className="min-h-screen bg-gray-50 px-6 py-12">
-        <div className="mx-auto max-w-7xl">
-          <div className="animate-pulse space-y-6">
-            <div className="h-10 w-64 rounded-lg bg-gray-200" />
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-900">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
 
-            <div className="h-5 w-96 rounded bg-gray-200" />
+          <p className="text-slate-600">
+            Loading landlord dashboard...
+          </p>
+        </div>
+      </main>
+    );
+  }
 
-            <div className="grid gap-5 md:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-32 rounded-2xl bg-gray-200"
-                />
-              ))}
-            </div>
+  if (userError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-slate-900">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          <XCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
 
-            <div className="h-64 rounded-2xl bg-gray-200" />
+          <h1 className="text-xl font-bold">
+            Unable to load dashboard
+          </h1>
 
-            <div className="h-64 rounded-2xl bg-gray-200" />
-          </div>
+          <p className="mt-3 text-sm text-slate-500">
+            Your session may have expired. Please login
+            again.
+          </p>
+
+          <button
+            onClick={() =>
+              window.location.assign("/auth/login")
+            }
+            className="mt-6 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-500"
+          >
+            Go to Login
+          </button>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <header className="mb-8 flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-blue-600">
+            <p className="text-sm font-medium text-blue-600">
               Landlord Dashboard
             </p>
 
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
               Welcome, {user?.name || "Landlord"} 👋
             </h1>
 
-            <p className="mt-2 text-gray-600">
-              Manage your rental requests and properties
-              from one place.
+            <p className="mt-1 text-sm text-slate-500">
+              Manage your properties and rental requests.
             </p>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100"
-          >
-            Logout
-          </button>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-            <p className="text-sm font-medium text-red-700">
-              {error}
-            </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={refreshDashboard}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
 
             <button
-              onClick={() => {
-                window.location.reload();
-              }}
-              className="shrink-0 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-100"
             >
-              Retry
+              <LogOut className="h-4 w-4" />
+              Logout
             </button>
           </div>
-        )}
+        </header>
 
-        {/* Property Error */}
-        {propertyError && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-            <p className="text-sm font-medium text-red-700">
-              {propertyError}
-            </p>
+        {/* Messages */}
+        {(message || error) && (
+          <div className="mb-6">
+            {message && (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                <CheckCircle className="h-5 w-5 shrink-0" />
+                <span>{message}</span>
+              </div>
+            )}
 
-            <button
-              onClick={() => setPropertyError("")}
-              className="text-red-600 hover:text-red-800"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Success */}
-        {successMessage && (
-          <div className="mb-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-            <p className="text-sm font-medium text-emerald-700">
-              {successMessage}
-            </p>
-
-            <button
-              onClick={() => setSuccessMessage("")}
-              className="text-emerald-600 hover:text-emerald-800"
-            >
-              ✕
-            </button>
+            {error && (
+              <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <XCircle className="h-5 w-5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
           </div>
         )}
 
         {/* Stats */}
-        <section className="mb-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Total Requests */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500">
-                Total Requests
-              </span>
+        <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Total Properties
+                </p>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                📋
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {properties.length}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                <Home className="h-6 w-6" />
               </div>
             </div>
-
-            <p className="text-3xl font-bold text-gray-900">
-              {activeRequests.length}
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Active rental requests
-            </p>
           </div>
 
-          {/* Pending */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500">
-                Pending
-              </span>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Available
+                </p>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                ⏳
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {availableProperties.length}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
+                <CheckCircle className="h-6 w-6" />
               </div>
             </div>
-
-            <p className="text-3xl font-bold text-gray-900">
-              {pendingRequests.length}
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Waiting for your decision
-            </p>
           </div>
 
-          {/* Approved */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500">
-                Approved
-              </span>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Rented
+                </p>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                ✓
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {rentedProperties.length}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-orange-50 p-3 text-orange-600">
+                <Users className="h-6 w-6" />
               </div>
             </div>
-
-            <p className="text-3xl font-bold text-gray-900">
-              {approvedRequests.length}
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Successfully approved
-            </p>
           </div>
 
-          {/* Properties */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500">
-                My Properties
-              </span>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Pending Requests
+                </p>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                🏠
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {pendingRequests.length}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-yellow-50 p-3 text-yellow-600">
+                <Clock className="h-6 w-6" />
               </div>
             </div>
-
-            <p className="text-3xl font-bold text-gray-900">
-              {properties.length}
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              {availableProperties.length} available
-            </p>
           </div>
         </section>
 
         {/* My Properties */}
-        <section className="mb-12">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="mb-10">
+          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-slate-900">
                 My Properties
               </h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-slate-500">
                 Add, edit and manage your rental properties.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => {
-                  setSuccessMessage("");
-                  void refetchProperties();
-                }}
-                disabled={isPropertiesLoading}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isPropertiesLoading
-                  ? "Refreshing..."
-                  : "Refresh"}
-              </button>
+            <button
+              onClick={openAddPropertyModal}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white transition hover:bg-blue-500"
+            >
+              <Plus className="h-5 w-5" />
+              Add Property
+            </button>
+          </div>
 
-              <button
-                onClick={openAddPropertyForm}
-                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-              >
-                + Add Property
-              </button>
+          {/* Search */}
+          <div className="mb-5">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(event.target.value)
+                }
+                placeholder="Search your properties..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
-          {/* Property Summary */}
-          <div className="mb-5 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-white px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Total
-              </p>
-
-              <p className="mt-1 text-2xl font-bold text-gray-900">
-                {properties.length}
-              </p>
+          {propertiesError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-red-600">
+              Failed to load properties.
             </div>
+          ) : filteredProperties.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+              <Home className="mx-auto h-12 w-12 text-slate-300" />
 
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-                Available
-              </p>
-
-              <p className="mt-1 text-2xl font-bold text-emerald-700">
-                {availableProperties.length}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                Rented
-              </p>
-
-              <p className="mt-1 text-2xl font-bold text-blue-700">
-                {rentedProperties.length}
-              </p>
-            </div>
-          </div>
-
-          {properties.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-2xl">
-                🏠
-              </div>
-
-              <h3 className="text-xl font-bold text-gray-900">
-                No properties yet
+              <h3 className="mt-4 text-lg font-semibold text-slate-800">
+                No properties found
               </h3>
 
-              <p className="mx-auto mt-2 max-w-md text-gray-500">
-                Add your first property to start receiving
-                rental requests.
+              <p className="mt-2 text-sm text-slate-500">
+                {searchTerm
+                  ? "Try a different search term."
+                  : "Start by adding your first property."}
               </p>
 
-              <button
-                onClick={openAddPropertyForm}
-                className="mt-6 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                + Add Your First Property
-              </button>
+              {!searchTerm && (
+                <button
+                  onClick={openAddPropertyModal}
+                  className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-500"
+                >
+                  Add Property
+                </button>
+              )}
             </div>
           ) : (
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {properties.map((property) => (
-                <article
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {filteredProperties.map((property) => (
+                <div
                   key={property.id}
-                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                 >
-                  {/* Image */}
-                  <div className="relative h-48 bg-gray-100">
+                  <div className="relative h-48 bg-slate-100">
                     {property.imageUrl ? (
                       <img
                         src={property.imageUrl}
@@ -978,120 +1051,101 @@ export default function LandlordDashboardPage() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-5xl">
-                        🏠
+                      <div className="flex h-full items-center justify-center">
+                        <Home className="h-16 w-16 text-slate-300" />
                       </div>
                     )}
 
                     <span
-                      className={`absolute right-3 top-3 rounded-full border px-3 py-1 text-xs font-semibold ${getPropertyStatusStyle(
-                        property.status
-                      )}`}
+                      className={`absolute right-3 top-3 rounded-full px-3 py-1 text-xs font-semibold ${
+                        property.status === "AVAILABLE"
+                          ? "bg-emerald-500 text-white"
+                          : property.status === "RENTED"
+                          ? "bg-orange-500 text-white"
+                          : "bg-slate-700 text-white"
+                      }`}
                     >
                       {property.status}
                     </span>
                   </div>
 
-                  {/* Content */}
                   <div className="p-5">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="line-clamp-1 text-lg font-bold text-gray-900">
-                          {property.title}
-                        </h3>
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <h3 className="line-clamp-1 text-lg font-bold text-slate-900">
+                        {property.title}
+                      </h3>
 
-                        <p className="mt-1 text-sm text-gray-500">
-                          📍 {property.location}
-                        </p>
-                      </div>
-
-                      <p className="shrink-0 text-lg font-bold text-blue-600">
+                      <span className="shrink-0 text-sm font-semibold text-blue-600">
                         {formatPrice(property.price)}
-                      </p>
-                    </div>
-
-                    <p className="mb-4 line-clamp-2 text-sm leading-6 text-gray-600">
-                      {property.description}
-                    </p>
-
-                    <div className="mb-4 flex flex-wrap gap-2 text-xs font-medium text-gray-600">
-                      <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🛏️ {property.bedrooms} Beds
-                      </span>
-
-                      <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🛁 {property.bathrooms} Baths
-                      </span>
-
-                      <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🏢 {property.propertyType}
                       </span>
                     </div>
 
-                    <div className="mb-5">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                        Category
-                      </p>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <MapPin className="h-4 w-4 shrink-0" />
 
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                        {property.category?.name ||
-                          "Uncategorized"}
+                      <span className="line-clamp-1">
+                        {property.location}
                       </span>
                     </div>
 
-                    {property.amenities?.length > 0 && (
-                      <div className="mb-5">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Amenities
-                        </p>
+                    <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
+                      <span className="inline-flex items-center gap-1">
+                        <BedDouble className="h-4 w-4" />
+                        {property.bedrooms} beds
+                      </span>
 
-                        <div className="flex flex-wrap gap-1.5">
-                          {property.amenities
-                            .slice(0, 5)
-                            .map((amenity) => (
-                              <span
-                                key={amenity}
-                                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600"
-                              >
-                                {amenity}
-                              </span>
-                            ))}
+                      <span className="inline-flex items-center gap-1">
+                        <Bath className="h-4 w-4" />
+                        {property.bathrooms} baths
+                      </span>
 
-                          {property.amenities.length > 5 && (
-                            <span className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-500">
-                              +
-                              {property.amenities.length - 5}{" "}
-                              more
-                            </span>
-                          )}
-                        </div>
+                      <span className="inline-flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        /month
+                      </span>
+                    </div>
+
+                    {property.category && (
+                      <div className="mt-4">
+                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-600">
+                          {property.category.name}
+                        </span>
                       </div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex gap-3 border-t border-gray-100 pt-4">
+                    <div className="mt-5 flex gap-2">
                       <button
                         onClick={() =>
-                          openEditPropertyForm(property)
+                          openEditPropertyModal(property)
                         }
-                        disabled={propertyActionLoading}
-                        className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                       >
+                        <Pencil className="h-4 w-4" />
                         Edit
                       </button>
 
                       <button
                         onClick={() =>
-                          void handleDeleteProperty(property)
+                          handleDeleteProperty(property.id)
                         }
-                        disabled={propertyActionLoading}
-                        className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={
+                          actionLoading ===
+                          `delete-${property.id}`
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
+                        {actionLoading ===
+                        `delete-${property.id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+
                         Delete
                       </button>
                     </div>
                   </div>
-                </article>
+                </div>
               ))}
             </div>
           )}
@@ -1099,273 +1153,270 @@ export default function LandlordDashboardPage() {
 
         {/* Rental Requests */}
         <section>
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">
-                Rental Requests
-              </h2>
+          <div className="mb-5">
+            <h2 className="text-2xl font-bold text-slate-900">
+              Rental Requests
+            </h2>
 
-              <p className="mt-1 text-sm text-gray-500">
-                Review and manage tenant applications.
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                setSuccessMessage("");
-                void refetchRentalRequests();
-              }}
-              disabled={isRequestsLoading}
-              className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isRequestsLoading
-                ? "Refreshing..."
-                : "Refresh"}
-            </button>
+            <p className="mt-1 text-sm text-slate-500">
+              Review and manage tenant rental requests.
+            </p>
           </div>
 
-          {isRequestsLoading ? (
-            <div className="space-y-5">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-64 animate-pulse rounded-2xl bg-white shadow-sm"
-                />
-              ))}
+          {requestsError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-red-600">
+              Failed to load rental requests.
             </div>
-          ) : activeRequests.length === 0 ? (
-            <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-2xl">
-                🏠
-              </div>
+          ) : visibleRentalRequests.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+              <Users className="mx-auto h-12 w-12 text-slate-300" />
 
-              <h3 className="text-xl font-bold text-gray-900">
-                No active rental requests
+              <h3 className="mt-4 text-lg font-semibold text-slate-800">
+                No rental requests
               </h3>
 
-              <p className="mx-auto mt-2 max-w-md text-gray-500">
-                When tenants request one of your available
-                properties, their active applications will
-                appear here.
+              <p className="mt-2 text-sm text-slate-500">
+                You do not have any active rental requests.
               </p>
             </div>
           ) : (
-            <div className="space-y-5">
-              {activeRequests.map((request) => (
-                <article
+            <div className="space-y-4">
+              {visibleRentalRequests.map((request) => (
+                <div
                   key={request.id}
-                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
-                  <div className="p-6">
-                    {/* Request Header */}
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <div className="mb-2 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                              request.status
-                            )}`}
-                          >
-                            {request.status}
-                          </span>
-
-                          <span className="text-xs text-gray-400">
-                            Request ID:{" "}
-                            {request.id.slice(0, 8)}
-                          </span>
-                        </div>
-
-                        <h3 className="text-xl font-bold text-gray-900">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="text-lg font-bold text-slate-900">
                           {request.property.title}
                         </h3>
 
-                        <p className="mt-1 text-sm text-gray-500">
-                          📍 {request.property.location}
-                        </p>
-                      </div>
-
-                      <div className="text-left lg:text-right">
-                        <p className="text-2xl font-bold text-blue-600">
-                          {formatPrice(
-                            request.property.price
-                          )}
-                        </p>
-
-                        <p className="text-sm text-gray-500">
-                          per month
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Request Details */}
-                    <div className="mt-6 grid gap-5 border-t border-gray-100 pt-6 md:grid-cols-2 lg:grid-cols-4">
-                      {/* Tenant */}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Tenant
-                        </p>
-
-                        <p className="mt-1 font-semibold text-gray-900">
-                          {request.tenant.name}
-                        </p>
-
-                        <p className="mt-1 break-all text-sm text-gray-500">
-                          {request.tenant.email}
-                        </p>
-                      </div>
-
-                      {/* Move-in Date */}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Move-in Date
-                        </p>
-
-                        <p className="mt-1 font-semibold text-gray-900">
-                          {formatDate(
-                            request.moveInDate
-                          )}
-                        </p>
-                      </div>
-
-                      {/* Property Status */}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Property Status
-                        </p>
-
-                        <p className="mt-1 font-semibold text-gray-900">
-                          {request.property.status}
-                        </p>
-                      </div>
-
-                      {/* Requested On */}
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Requested On
-                        </p>
-
-                        <p className="mt-1 font-semibold text-gray-900">
-                          {formatDate(
-                            request.createdAt
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Tenant Message */}
-                    {request.message && (
-                      <div className="mt-6 rounded-xl bg-gray-50 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                          Tenant Message
-                        </p>
-
-                        <p className="mt-2 text-sm leading-6 text-gray-700">
-                          {request.message}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Pending Actions */}
-                    {request.status === "PENDING" && (
-                      <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:justify-end">
-                        <button
-                          onClick={() =>
-                            void handleStatusUpdate(
-                              request.id,
-                              "REJECTED"
-                            )
-                          }
-                          disabled={
-                            actionLoadingId === request.id
-                          }
-                          className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            request.status === "PENDING"
+                              ? "bg-yellow-50 text-yellow-700"
+                              : request.status === "APPROVED"
+                              ? "bg-blue-50 text-blue-700"
+                              : request.status === "ACTIVE"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : request.status ===
+                                "REJECTED"
+                              ? "bg-red-50 text-red-700"
+                              : request.status ===
+                                "COMPLETED"
+                              ? "bg-cyan-50 text-cyan-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
                         >
-                          {actionLoadingId === request.id
-                            ? "Processing..."
-                            : "Reject Request"}
-                        </button>
+                          {request.status}
+                        </span>
+                      </div>
 
+                      <div className="mt-4 grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+                        <div>
+                          <span className="text-slate-400">
+                            Tenant
+                          </span>
+
+                          <p className="mt-1 font-medium text-slate-800">
+                            {request.tenant.name}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400">
+                            Email
+                          </span>
+
+                          <p className="mt-1 break-all font-medium text-slate-800">
+                            {request.tenant.email}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400">
+                            Location
+                          </span>
+
+                          <p className="mt-1 flex items-center gap-1 font-medium text-slate-800">
+                            <MapPin className="h-4 w-4 text-slate-400" />
+                            {request.property.location}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400">
+                            Monthly Rent
+                          </span>
+
+                          <p className="mt-1 font-semibold text-blue-600">
+                            {formatPrice(
+                              request.property.price
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400">
+                            Move-in Date
+                          </span>
+
+                          <p className="mt-1 font-medium text-slate-800">
+                            {formatDate(
+                              request.moveInDate
+                            )}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400">
+                            Request Date
+                          </span>
+
+                          <p className="mt-1 font-medium text-slate-800">
+                            {formatDate(
+                              request.createdAt
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      {request.message && (
+                        <div className="mt-4 rounded-xl bg-slate-50 p-4">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                            Tenant Message
+                          </p>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {request.message}
+                          </p>
+                        </div>
+                      )}
+
+                      {request.payment && (
+                        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-slate-400">
+                                Payment Status
+                              </p>
+
+                              <p className="mt-1 text-sm font-medium text-slate-800">
+                                {request.payment.status}
+                              </p>
+                            </div>
+
+                            {request.payment.amount !==
+                              undefined && (
+                              <p className="text-sm font-semibold text-blue-600">
+                                {formatPrice(
+                                  request.payment.amount
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {request.status === "PENDING" && (
+                      <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
                         <button
                           onClick={() =>
-                            void handleStatusUpdate(
+                            handleRentalRequestStatus(
                               request.id,
                               "APPROVED"
                             )
                           }
                           disabled={
-                            actionLoadingId === request.id
+                            actionLoading ===
+                              `APPROVED-${request.id}` ||
+                            actionLoading ===
+                              `REJECTED-${request.id}`
                           }
-                          className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {actionLoadingId === request.id
-                            ? "Processing..."
-                            : "Approve Request"}
+                          {actionLoading ===
+                          `APPROVED-${request.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+
+                          Approve
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleRentalRequestStatus(
+                              request.id,
+                              "REJECTED"
+                            )
+                          }
+                          disabled={
+                            actionLoading ===
+                              `APPROVED-${request.id}` ||
+                            actionLoading ===
+                              `REJECTED-${request.id}`
+                          }
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionLoading ===
+                          `REJECTED-${request.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <X className="h-4 w-4" />
+                          )}
+
+                          Reject
                         </button>
                       </div>
                     )}
-
-                    {/* Approved */}
-                    {request.status === "APPROVED" && (
-                      <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                        ✓ This rental request has been
-                        approved. The property is now marked
-                        as rented.
-                      </div>
-                    )}
-
-                    {/* Rejected */}
-                    {request.status === "REJECTED" && (
-                      <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                        This rental request has been rejected.
-                      </div>
-                    )}
                   </div>
-                </article>
+                </div>
               ))}
             </div>
           )}
         </section>
       </div>
 
-      {/* Add / Edit Property Modal */}
-      {showPropertyForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-6">
-          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+      {/* Property Modal */}
+      {showPropertyModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 px-4 py-8 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 p-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-slate-900">
                   {editingProperty
                     ? "Edit Property"
-                    : "Add New Property"}
+                    : "Add Property"}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-slate-500">
                   {editingProperty
                     ? "Update your property information."
-                    : "Add a new rental property to RentNest."}
+                    : "Add a new rental property."}
                 </p>
               </div>
 
               <button
-                type="button"
-                onClick={resetPropertyForm}
-                disabled={propertyActionLoading}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
+                onClick={closePropertyModal}
+                disabled={submitting}
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
               >
-                ✕
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Form */}
             <form
               onSubmit={handlePropertySubmit}
-              className="max-h-[75vh] overflow-y-auto px-6 py-6"
+              className="p-5"
             >
-              <div className="grid gap-5 md:grid-cols-2">
-                {/* Title */}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Property Title
                   </label>
 
@@ -1373,39 +1424,37 @@ export default function LandlordDashboardPage() {
                     type="text"
                     value={formData.title}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "title",
                         event.target.value
                       )
                     }
-                    placeholder="Modern Apartment in Dhaka"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="e.g. Modern 2 Bedroom Apartment"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Description */}
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Description
                   </label>
 
                   <textarea
                     value={formData.description}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "description",
                         event.target.value
                       )
                     }
-                    placeholder="Describe your property..."
                     rows={4}
-                    className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="Describe your property..."
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Location */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Location
                   </label>
 
@@ -1413,98 +1462,72 @@ export default function LandlordDashboardPage() {
                     type="text"
                     value={formData.location}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "location",
                         event.target.value
                       )
                     }
-                    placeholder="Mirpur, Dhaka"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="e.g. Dhanmondi, Dhaka"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Price */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Monthly Price
                   </label>
 
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     value={formData.price}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "price",
                         event.target.value
                       )
                     }
-                    placeholder="25000"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="1200"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Property Type */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Property Type
                   </label>
 
-                  <select
+                  <input
+                    type="text"
                     value={formData.propertyType}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "propertyType",
                         event.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  >
-                    <option value="">
-                      Select property type
-                    </option>
-
-                    <option value="Apartment">
-                      Apartment
-                    </option>
-
-                    <option value="House">House</option>
-
-                    <option value="Studio">
-                      Studio
-                    </option>
-
-                    <option value="Villa">Villa</option>
-
-                    <option value="Condo">Condo</option>
-
-                    <option value="Duplex">Duplex</option>
-
-                    <option value="Room">Room</option>
-                  </select>
+                    placeholder="Apartment / House / Villa"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
                 </div>
 
-                {/* Category */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Category
                   </label>
 
                   <select
                     value={formData.categoryId}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "categoryId",
                         event.target.value
                       )
                     }
-                    disabled={isCategoriesLoading}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   >
                     <option value="">
-                      {isCategoriesLoading
-                        ? "Loading categories..."
-                        : "Select category"}
+                      Select category
                     </option>
 
                     {categories.map((category) => (
@@ -1518,76 +1541,48 @@ export default function LandlordDashboardPage() {
                   </select>
                 </div>
 
-                {/* Bedrooms */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Bedrooms
                   </label>
 
                   <input
                     type="number"
                     min="0"
-                    step="1"
                     value={formData.bedrooms}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "bedrooms",
                         event.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="2"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Bathrooms */}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Bathrooms
                   </label>
 
                   <input
                     type="number"
                     min="0"
-                    step="1"
                     value={formData.bathrooms}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "bathrooms",
                         event.target.value
                       )
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="2"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
 
-                {/* Image URL */}
                 <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
-                    Image URL
-                  </label>
-
-                  <input
-                    type="url"
-                    value={formData.imageUrl}
-                    onChange={(event) =>
-                      handleFormChange(
-                        "imageUrl",
-                        event.target.value
-                      )
-                    }
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Optional. Use a publicly accessible image
-                    URL.
-                  </p>
-                </div>
-
-                {/* Amenities */}
-                <div className="md:col-span-2">
-                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
                     Amenities
                   </label>
 
@@ -1595,74 +1590,91 @@ export default function LandlordDashboardPage() {
                     type="text"
                     value={formData.amenities}
                     onChange={(event) =>
-                      handleFormChange(
+                      handleInputChange(
                         "amenities",
                         event.target.value
                       )
                     }
-                    placeholder="WiFi, Parking, Lift, Gas, Security"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    placeholder="WiFi, Parking, Gym, Security"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
 
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Separate amenities using commas.
+                  <p className="mt-1 text-xs text-slate-400">
+                    Separate amenities with commas.
                   </p>
                 </div>
 
-                {/* Status */}
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Image URL
+                  </label>
+
+                  <input
+                    type="url"
+                    value={formData.imageUrl}
+                    onChange={(event) =>
+                      handleInputChange(
+                        "imageUrl",
+                        event.target.value
+                      )
+                    }
+                    placeholder="https://example.com/property.jpg"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
                 {editingProperty && (
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-700">
-                      Status
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Property Status
                     </label>
 
                     <select
                       value={formData.status}
                       onChange={(event) =>
-                        handleFormChange(
+                        handleInputChange(
                           "status",
                           event.target.value
                         )
                       }
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="AVAILABLE">
-                        Available
+                        AVAILABLE
                       </option>
 
                       <option value="RENTED">
-                        Rented
+                        RENTED
                       </option>
 
                       <option value="UNAVAILABLE">
-                        Unavailable
+                        UNAVAILABLE
                       </option>
                     </select>
                   </div>
                 )}
               </div>
 
-              {/* Form Actions */}
-              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:justify-end">
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={resetPropertyForm}
-                  disabled={propertyActionLoading}
-                  className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={closePropertyModal}
+                  disabled={submitting}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  disabled={propertyActionLoading}
-                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={submitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {propertyActionLoading
-                    ? editingProperty
-                      ? "Updating..."
-                      : "Creating..."
-                    : editingProperty
+                  {submitting && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+
+                  {editingProperty
                     ? "Update Property"
                     : "Create Property"}
                 </button>

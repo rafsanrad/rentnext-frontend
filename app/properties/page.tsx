@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Heart, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api";
@@ -19,6 +20,17 @@ interface PropertyFilters {
   propertyType: string;
   bedrooms: string;
   categoryId: string;
+}
+
+interface WatchlistItem {
+  id: string;
+  propertyId: string;
+}
+
+interface WatchlistResponse {
+  success: boolean;
+  message: string;
+  data: WatchlistItem[];
 }
 
 const initialFilters: PropertyFilters = {
@@ -73,10 +85,35 @@ async function getProperties(
   return apiFetch<PropertiesResponse>(endpoint);
 }
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const token = localStorage.getItem("accessToken");
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 function PropertyCard({
   property,
+  isInWatchlist,
+  watchlistLoading,
+  onToggleWatchlist,
 }: {
   property: Property;
+  isInWatchlist: boolean;
+  watchlistLoading: boolean;
+  onToggleWatchlist: (
+    propertyId: string,
+    currentlySaved: boolean
+  ) => void;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
@@ -101,6 +138,46 @@ function PropertyCard({
         <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
           {property.propertyType}
         </span>
+
+        {/* Watchlist Button */}
+        <button
+          type="button"
+          onClick={() =>
+            onToggleWatchlist(
+              property.id,
+              isInWatchlist
+            )
+          }
+          disabled={watchlistLoading}
+          aria-label={
+            isInWatchlist
+              ? "Remove from watchlist"
+              : "Add to watchlist"
+          }
+          title={
+            isInWatchlist
+              ? "Remove from watchlist"
+              : "Add to watchlist"
+          }
+          className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md transition ${
+            isInWatchlist
+              ? "text-red-500 hover:bg-red-50"
+              : "text-slate-500 hover:bg-blue-50 hover:text-blue-600"
+          } disabled:cursor-not-allowed disabled:opacity-60`}
+        >
+          {watchlistLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Heart
+              className="h-5 w-5"
+              fill={
+                isInWatchlist
+                  ? "currentColor"
+                  : "none"
+              }
+            />
+          )}
+        </button>
       </div>
 
       {/* Property Details */}
@@ -128,14 +205,16 @@ function PropertyCard({
         {/* Amenities */}
         {property.amenities?.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {property.amenities.slice(0, 3).map((amenity) => (
-              <span
-                key={amenity}
-                className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600"
-              >
-                {amenity}
-              </span>
-            ))}
+            {property.amenities
+              .slice(0, 3)
+              .map((amenity) => (
+                <span
+                  key={amenity}
+                  className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600"
+                >
+                  {amenity}
+                </span>
+              ))}
           </div>
         )}
 
@@ -143,7 +222,7 @@ function PropertyCard({
         <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5">
           <div>
             <p className="text-xl font-bold text-blue-600">
-              ৳{property.price.toLocaleString()}
+              ৳{Number(property.price).toLocaleString()}
             </p>
 
             <p className="text-xs text-slate-500">
@@ -192,6 +271,15 @@ export default function PropertiesPage() {
   const [appliedFilters, setAppliedFilters] =
     useState<PropertyFilters>(initialFilters);
 
+  const [watchlistIds, setWatchlistIds] =
+    useState<Set<string>>(new Set());
+
+  const [watchlistLoadingId, setWatchlistLoadingId] =
+    useState<string | null>(null);
+
+  const [watchlistMessage, setWatchlistMessage] =
+    useState("");
+
   const { data, isLoading, isError, error, refetch } =
     useQuery({
       queryKey: ["properties", appliedFilters],
@@ -199,6 +287,177 @@ export default function PropertiesPage() {
     });
 
   const properties = data?.data ?? [];
+
+  // ========================================
+  // LOAD WATCHLIST
+  // ========================================
+
+  useEffect(() => {
+    const loadWatchlist = async () => {
+      const token =
+        localStorage.getItem("accessToken");
+
+      if (!token) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "/api/watchlist",
+          {
+            method: "GET",
+            headers: {
+              ...getAuthHeaders(),
+            },
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data: WatchlistResponse =
+          await response.json();
+
+        if (!data.success || !Array.isArray(data.data)) {
+          return;
+        }
+
+        setWatchlistIds(
+          new Set(
+            data.data.map(
+              (item) => item.propertyId
+            )
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load watchlist:",
+          error
+        );
+      }
+    };
+
+    loadWatchlist();
+  }, []);
+
+  // ========================================
+  // TOGGLE WATCHLIST
+  // ========================================
+
+  const handleToggleWatchlist = async (
+    propertyId: string,
+    currentlySaved: boolean
+  ) => {
+    const token =
+      localStorage.getItem("accessToken");
+
+    if (!token) {
+      window.location.assign(
+        `/auth/login?callbackUrl=${encodeURIComponent(
+          "/properties"
+        )}`
+      );
+
+      return;
+    }
+
+    try {
+      setWatchlistLoadingId(propertyId);
+      setWatchlistMessage("");
+
+      if (currentlySaved) {
+        const response = await fetch(
+          `/api/watchlist/${propertyId}`,
+          {
+            method: "DELETE",
+            headers: {
+              ...getAuthHeaders(),
+            },
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.message ||
+              "Failed to remove property from watchlist."
+          );
+        }
+
+        setWatchlistIds((current) => {
+          const next = new Set(current);
+          next.delete(propertyId);
+          return next;
+        });
+
+        setWatchlistMessage(
+          "Property removed from watchlist."
+        );
+      } else {
+        const response = await fetch(
+          "/api/watchlist",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...getAuthHeaders(),
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              propertyId,
+            }),
+            cache: "no-store",
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.message ||
+              "Failed to add property to watchlist."
+          );
+        }
+
+        setWatchlistIds((current) => {
+          const next = new Set(current);
+          next.add(propertyId);
+          return next;
+        });
+
+        setWatchlistMessage(
+          "Property added to watchlist."
+        );
+      }
+
+      setTimeout(() => {
+        setWatchlistMessage("");
+      }, 3000);
+    } catch (error) {
+      console.error(
+        "Watchlist error:",
+        error
+      );
+
+      setWatchlistMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong with watchlist."
+      );
+
+      setTimeout(() => {
+        setWatchlistMessage("");
+      }, 4000);
+    } finally {
+      setWatchlistLoadingId(null);
+    }
+  };
 
   const handleFilterChange = (
     field: keyof PropertyFilters,
@@ -238,6 +497,22 @@ export default function PropertiesPage() {
           </p>
         </div>
       </section>
+
+      {/* Watchlist Message */}
+      {watchlistMessage && (
+        <div className="fixed right-5 top-24 z-50 max-w-sm rounded-xl border border-blue-200 bg-white px-5 py-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <Heart
+              className="h-5 w-5 text-blue-600"
+              fill="currentColor"
+            />
+
+            <p className="text-sm font-medium text-slate-700">
+              {watchlistMessage}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -522,6 +797,16 @@ export default function PropertiesPage() {
                     <PropertyCard
                       key={property.id}
                       property={property}
+                      isInWatchlist={watchlistIds.has(
+                        property.id
+                      )}
+                      watchlistLoading={
+                        watchlistLoadingId ===
+                        property.id
+                      }
+                      onToggleWatchlist={
+                        handleToggleWatchlist
+                      }
                     />
                   ))}
                 </div>

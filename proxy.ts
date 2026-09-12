@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://rentnest-backend-umber.vercel.app/api";
+  "http://localhost:8000/api";
 
 const PUBLIC_ROUTES = [
   "/",
@@ -129,6 +129,9 @@ export async function proxy(request: NextRequest) {
     const data = await response.json();
 
     const user = data.data;
+
+    console.log("PROXY USER:", user);
+console.log("PROXY ROLE:", user?.role);
 
     /*
      * If a logged-in user tries to visit
