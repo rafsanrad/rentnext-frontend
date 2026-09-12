@@ -63,16 +63,23 @@ export default function LoginPage() {
 
       const response = await fetch("/api/auth/login", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
+        credentials: "include",
+
         body: JSON.stringify({
           email: formData.email.trim(),
           password: formData.password,
         }),
+
+        cache: "no-store",
       });
 
-      const data: LoginResponse = await response.json();
+      const data: LoginResponse =
+        await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
@@ -80,26 +87,37 @@ export default function LoginPage() {
         );
       }
 
+      // Save JWT token
+      localStorage.setItem(
+        "accessToken",
+        data.data.token
+      );
+
+      // Save user information
+      localStorage.setItem(
+        "user",
+        JSON.stringify(data.data.user)
+      );
+
       setSuccess(
         "Login successful! Redirecting..."
       );
 
-      /*
-       * The JWT is now stored inside an
-       * HttpOnly cookie by the Next.js API route.
-       *
-       * We intentionally DO NOT store the JWT
-       * in localStorage anymore.
-       */
-
       const role = data.data.user.role;
 
+      // Redirect without using window.location.href
       if (role === "ADMIN") {
-        window.location.href = "/admin/dashboard";
+        window.location.assign(
+          "/admin/dashboard"
+        );
       } else if (role === "LANDLORD") {
-        window.location.href = "/landlord/dashboard";
+        window.location.assign(
+          "/landlord/dashboard"
+        );
       } else {
-        window.location.href = "/tenant/dashboard";
+        window.location.assign(
+          "/tenant/dashboard"
+        );
       }
     } catch (err) {
       console.error("Login error:", err);
@@ -119,6 +137,7 @@ export default function LoginPage() {
       <div className="mx-auto w-full max-w-md">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           {/* Header */}
+
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-slate-900">
               Welcome back
@@ -130,6 +149,7 @@ export default function LoginPage() {
           </div>
 
           {/* Error */}
+
           {error && (
             <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -137,6 +157,7 @@ export default function LoginPage() {
           )}
 
           {/* Success */}
+
           {success && (
             <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
               {success}
@@ -144,11 +165,13 @@ export default function LoginPage() {
           )}
 
           {/* Form */}
+
           <form
             onSubmit={handleSubmit}
             className="space-y-5"
           >
             {/* Email */}
+
             <div>
               <label
                 htmlFor="email"
@@ -171,6 +194,7 @@ export default function LoginPage() {
             </div>
 
             {/* Password */}
+
             <div>
               <label
                 htmlFor="password"
@@ -192,7 +216,8 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Login Button */}
+            {/* Login */}
+
             <button
               type="submit"
               disabled={isLoading}
@@ -205,8 +230,10 @@ export default function LoginPage() {
           </form>
 
           {/* Register */}
+
           <div className="mt-6 text-center text-sm text-slate-600">
             Do not have an account?{" "}
+
             <Link
               href="/auth/register"
               className="font-semibold text-blue-600 transition hover:text-blue-700"

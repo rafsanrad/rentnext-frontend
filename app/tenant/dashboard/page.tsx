@@ -1,27 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+
 import {
-  Home,
-  ClipboardList,
-  Heart,
-  User,
-  LogOut,
-  Search,
-  Clock3,
-  CheckCircle2,
-  XCircle,
-  Ban,
-  MapPin,
-  BedDouble,
-  Bath,
-  CalendarDays,
-  DollarSign,
-  Loader2,
   AlertCircle,
-  ChevronRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
   CreditCard,
+  Home,
+  LogOut,
+  MapPin,
+  MessageSquare,
+  Star,
+  X,
+  XCircle,
 } from "lucide-react";
 
 interface UserData {
@@ -60,945 +54,1614 @@ interface RentalRequest {
   propertyId: string;
   moveInDate: string;
   message?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+  status:
+    | "PENDING"
+    | "APPROVED"
+    | "REJECTED"
+    | "CANCELLED"
+    | "ACTIVE"
+    | "COMPLETED";
+
   createdAt: string;
   updatedAt?: string;
+
   property: Property;
+
   payment?: Payment | null;
 }
 
-interface AuthResponse {
-  success: boolean;
-  message: string;
-  data: UserData;
-}
-
-interface RentalRequestsResponse {
-  success: boolean;
-  message: string;
-  data: RentalRequest[];
-}
-
-interface CheckoutResponse {
-  success: boolean;
-  message: string;
-  data?: {
-    sessionId: string;
-    checkoutUrl: string | null;
-  };
-}
-
-const formatCurrency = (price: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(price);
-};
-
-const formatDate = (date: string) => {
-  if (!date) {
-    return "N/A";
-  }
-
-  return new Date(date).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
-const getStatusStyles = (status: RentalRequest["status"]) => {
-  switch (status) {
-    case "PENDING":
-      return {
-        label: "Pending",
-        className: "bg-amber-50 text-amber-700 border-amber-200",
-        icon: Clock3,
-      };
-
-    case "APPROVED":
-      return {
-        label: "Approved",
-        className: "bg-green-50 text-green-700 border-green-200",
-        icon: CheckCircle2,
-      };
-
-    case "REJECTED":
-      return {
-        label: "Rejected",
-        className: "bg-red-50 text-red-700 border-red-200",
-        icon: XCircle,
-      };
-
-    case "CANCELLED":
-      return {
-        label: "Cancelled",
-        className: "bg-gray-100 text-gray-600 border-gray-200",
-        icon: Ban,
-      };
-
-    default:
-      return {
-        label: status,
-        className: "bg-gray-100 text-gray-600 border-gray-200",
-        icon: AlertCircle,
-      };
-  }
-};
-
 export default function TenantDashboardPage() {
-  const [user, setUser] = useState<UserData | null>(null);
+  const [user, setUser] =
+    useState<UserData | null>(null);
 
-  const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
+  const [rentalRequests, setRentalRequests] =
+    useState<RentalRequest[]>([]);
 
-  const [isUserLoading, setIsUserLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [isRequestsLoading, setIsRequestsLoading] = useState(true);
+  const [error, setError] =
+    useState("");
 
-  const [userError, setUserError] = useState("");
-  const [requestsError, setRequestsError] = useState("");
+  const [success, setSuccess] =
+    useState("");
 
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] =
+    useState<string | null>(null);
 
-  const [cancelSuccess, setCancelSuccess] = useState("");
+  const [payingId, setPayingId] =
+    useState<string | null>(null);
 
-  const [cancelError, setCancelError] = useState("");
+  const [reviewingRequest, setReviewingRequest] =
+    useState<RentalRequest | null>(null);
 
-  const [payingId, setPayingId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] =
+    useState(5);
 
-  const [paymentError, setPaymentError] = useState("");
+  const [reviewComment, setReviewComment] =
+    useState("");
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setIsUserLoading(true);
-        setUserError("");
+  const [reviewSubmitting, setReviewSubmitting] =
+    useState(false);
 
-        const response = await fetch("/api/auth/me", {
-          method: "GET",
-          cache: "no-store",
-        });
+  const [reviewError, setReviewError] =
+    useState("");
 
-        const data: AuthResponse = await response.json();
+  const [reviewSuccess, setReviewSuccess] =
+    useState("");
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || "Unable to load user information.");
-        }
+  // ========================================
+  // AUTH HEADERS
+  // ========================================
 
-        setUser(data.data);
-      } catch (error) {
-        console.error("Tenant dashboard user error:", error);
+  const getAuthHeaders = (): Record<
+    string,
+    string
+  > => {
+    const token =
+      localStorage.getItem("accessToken");
 
-        setUserError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load user information.",
-        );
-      } finally {
-        setIsUserLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
-
-  useEffect(() => {
-    const fetchRentalRequests = async () => {
-      try {
-        setIsRequestsLoading(true);
-        setRequestsError("");
-
-        const response = await fetch("/api/rental-requests/my", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        const data: RentalRequestsResponse = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || "Unable to load rental requests.");
-        }
-
-        // Cancelled requests remain in the database,
-        // but should not appear on the tenant dashboard.
-        const activeRequests = (data.data || []).filter(
-          (request) => request.status !== "CANCELLED",
-        );
-
-        setRentalRequests(activeRequests);
-      } catch (error) {
-        console.error("Rental requests error:", error);
-
-        setRequestsError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load rental requests.",
-        );
-      } finally {
-        setIsRequestsLoading(false);
-      }
-    };
-
-    fetchRentalRequests();
-  }, []);
-
-  const stats = useMemo(() => {
-    return {
-      total: rentalRequests.length,
-
-      pending: rentalRequests.filter((request) => request.status === "PENDING")
-        .length,
-
-      approved: rentalRequests.filter(
-        (request) => request.status === "APPROVED",
-      ).length,
-
-      rejected: rentalRequests.filter(
-        (request) => request.status === "REJECTED",
-      ).length,
-    };
-  }, [rentalRequests]);
-
-  const handleCancelRequest = async (requestId: string) => {
-    const shouldCancel = window.confirm(
-      "Are you sure you want to cancel this rental request?",
-    );
-
-    if (!shouldCancel) {
-      return;
+    if (!token) {
+      return {};
     }
 
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
+  // ========================================
+  // REDIRECT TO LOGIN
+  // ========================================
+
+  const redirectToLogin = () => {
+    localStorage.removeItem(
+      "accessToken"
+    );
+
+    localStorage.removeItem("user");
+
+    window.location.assign(
+      "/auth/login"
+    );
+  };
+
+  // ========================================
+  // LOAD DASHBOARD
+  // ========================================
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const authHeaders =
+          getAuthHeaders();
+
+        if (!authHeaders.Authorization) {
+          redirectToLogin();
+          return;
+        }
+
+        const [
+          userResponse,
+          requestResponse,
+        ] = await Promise.all([
+          fetch("/api/auth/me", {
+            method: "GET",
+
+            headers: {
+              ...authHeaders,
+            },
+
+            credentials: "include",
+
+            cache: "no-store",
+          }),
+
+          fetch("/api/rental-requests/my", {
+            method: "GET",
+
+            headers: {
+              ...authHeaders,
+            },
+
+            credentials: "include",
+
+            cache: "no-store",
+          }),
+        ]);
+
+        if (
+          userResponse.status === 401 ||
+          requestResponse.status === 401
+        ) {
+          redirectToLogin();
+          return;
+        }
+
+        if (!userResponse.ok) {
+          throw new Error(
+            "Failed to load user information."
+          );
+        }
+
+        if (!requestResponse.ok) {
+          throw new Error(
+            "Failed to load rental requests."
+          );
+        }
+
+        const userData =
+          await userResponse.json();
+
+        const requestData =
+          await requestResponse.json();
+
+        if (!userData.success) {
+          throw new Error(
+            userData.message ||
+              "Failed to load user information."
+          );
+        }
+
+        if (!requestData.success) {
+          throw new Error(
+            requestData.message ||
+              "Failed to load rental requests."
+          );
+        }
+
+        setUser(userData.data);
+
+        const requests =
+          Array.isArray(requestData.data)
+            ? requestData.data
+            : [];
+
+        setRentalRequests(
+          requests.filter(
+            (request: RentalRequest) =>
+              request.status !==
+              "CANCELLED"
+          )
+        );
+      } catch (err) {
+        console.error(
+          "Dashboard loading error:",
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboard();
+  }, []);
+
+  // ========================================
+  // CANCEL REQUEST
+  // ========================================
+
+  const handleCancelRequest = async (
+    requestId: string
+  ) => {
     try {
       setCancellingId(requestId);
-      setCancelError("");
-      setCancelSuccess("");
 
-      const response = await fetch(`/api/rental-requests/${requestId}/cancel`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
+      setError("");
+      setSuccess("");
 
-      const data = await response.json();
+      const response = await fetch(
+        `/api/rental-requests/${requestId}/cancel`,
+        {
+          method: "PATCH",
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to cancel rental request.");
-      }
+          headers: {
+            ...getAuthHeaders(),
+          },
 
-      // Remove cancelled request from the dashboard immediately.
-      setRentalRequests((currentRequests) =>
-        currentRequests.filter((request) => request.id !== requestId),
+          credentials: "include",
+
+          cache: "no-store",
+        }
       );
 
-      setCancelSuccess("Rental request cancelled successfully.");
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      const data =
+        await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message ||
+            "Failed to cancel rental request."
+        );
+      }
+
+      setRentalRequests(
+        (currentRequests) =>
+          currentRequests.filter(
+            (request) =>
+              request.id !== requestId
+          )
+      );
+
+      setSuccess(
+        "Rental request cancelled successfully."
+      );
 
       setTimeout(() => {
-        setCancelSuccess("");
-      }, 3000);
-    } catch (error) {
-      console.error("Cancel rental request error:", error);
+        setSuccess("");
+      }, 4000);
+    } catch (err) {
+      console.error(
+        "Cancel request error:",
+        err
+      );
 
-      setCancelError(
-        error instanceof Error
-          ? error.message
-          : "Failed to cancel rental request.",
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to cancel rental request."
       );
     } finally {
       setCancellingId(null);
     }
   };
 
-  const handlePayNow = async (requestId: string) => {
+  // ========================================
+  // PAYMENT
+  // ========================================
+
+  const handlePayment = async (
+    requestId: string
+  ) => {
     try {
       setPayingId(requestId);
-      setPaymentError("");
 
-      const response = await fetch("/api/payments/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rentalRequestId: requestId,
-        }),
-        cache: "no-store",
-      });
+      setError("");
 
-      const data: CheckoutResponse = await response.json();
+      const response = await fetch(
+        "/api/payments/create-checkout-session",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            ...getAuthHeaders(),
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            rentalRequestId:
+              requestId,
+          }),
+
+          cache: "no-store",
+        }
+      );
+
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      const data =
+        await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.message || "Unable to create payment session.");
+        throw new Error(
+          data.message ||
+            "Failed to create payment session."
+        );
       }
 
-      const checkoutUrl = data.data?.checkoutUrl;
+      const checkoutUrl =
+        data.data?.checkoutUrl;
 
       if (!checkoutUrl) {
-        throw new Error("Stripe checkout URL was not returned by the server.");
+        throw new Error(
+          "Stripe checkout URL was not returned."
+        );
       }
 
-      // Redirect to Stripe Checkout
-      window.location.assign(checkoutUrl);
-    } catch (error) {
-      console.error("Payment error:", error);
+      window.location.assign(
+        checkoutUrl
+      );
+    } catch (err) {
+      console.error(
+        "Payment error:",
+        err
+      );
 
-      setPaymentError(
-        error instanceof Error ? error.message : "Unable to start payment.",
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to start payment."
       );
 
       setPayingId(null);
     }
   };
 
-  const handleLogout = async () => {
+  // ========================================
+  // OPEN REVIEW
+  // ========================================
+
+  const handleOpenReview = (
+    request: RentalRequest
+  ) => {
+    setReviewingRequest(request);
+
+    setReviewRating(5);
+
+    setReviewComment("");
+
+    setReviewError("");
+
+    setReviewSuccess("");
+  };
+
+  // ========================================
+  // CLOSE REVIEW
+  // ========================================
+
+  const handleCloseReview = () => {
+    if (reviewSubmitting) {
+      return;
+    }
+
+    setReviewingRequest(null);
+
+    setReviewRating(5);
+
+    setReviewComment("");
+
+    setReviewError("");
+  };
+
+  // ========================================
+  // SUBMIT REVIEW
+  // ========================================
+
+  const handleSubmitReview = async () => {
+    if (!reviewingRequest) {
+      return;
+    }
+
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-    } catch (error) {
-      console.error("Logout error:", error);
+      setReviewSubmitting(true);
+
+      setReviewError("");
+
+      const authHeaders =
+        getAuthHeaders();
+
+      if (!authHeaders.Authorization) {
+        throw new Error(
+          "You are not logged in. Please login again."
+        );
+      }
+
+      const response = await fetch(
+        "/api/reviews",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            ...authHeaders,
+          },
+
+          credentials: "include",
+
+          body: JSON.stringify({
+            propertyId:
+              reviewingRequest.propertyId,
+
+            rentalRequestId:
+              reviewingRequest.id,
+
+            rating: reviewRating,
+
+            comment:
+              reviewComment.trim(),
+          }),
+
+          cache: "no-store",
+        }
+      );
+
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+
+      const responseText =
+        await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(
+          responseText
+        );
+      } catch {
+        console.error(
+          "Review response was not JSON:",
+          responseText
+        );
+
+        throw new Error(
+          "Server returned an invalid response."
+        );
+      }
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.message ||
+            "Failed to submit review."
+        );
+      }
+
+      setRentalRequests(
+        (currentRequests) =>
+          currentRequests.map(
+            (request) =>
+              request.id ===
+              reviewingRequest.id
+                ? {
+                    ...request,
+                    status:
+                      "COMPLETED",
+                  }
+                : request
+          )
+      );
+
+      setReviewSuccess(
+        "Review submitted successfully. Rental completed."
+      );
+
+      setReviewingRequest(null);
+
+      setReviewRating(5);
+
+      setReviewComment("");
+
+      setTimeout(() => {
+        setReviewSuccess("");
+      }, 4000);
+    } catch (err) {
+      console.error(
+        "Review submission error:",
+        err
+      );
+
+      setReviewError(
+        err instanceof Error
+          ? err.message
+          : "Failed to submit review."
+      );
     } finally {
-      window.location.href = "/auth/login";
+      setReviewSubmitting(false);
     }
   };
 
+  // ========================================
+  // LOGOUT
+  // ========================================
+
+  const handleLogout = async () => {
+    try {
+      await fetch(
+        "/api/auth/logout",
+        {
+          method: "POST",
+
+          headers: {
+            ...getAuthHeaders(),
+          },
+
+          credentials: "include",
+        }
+      );
+    } catch (err) {
+      console.error(
+        "Logout error:",
+        err
+      );
+    } finally {
+      localStorage.removeItem(
+        "accessToken"
+      );
+
+      localStorage.removeItem("user");
+
+      window.location.assign(
+        "/auth/login"
+      );
+    }
+  };
+
+  // ========================================
+  // STATUS STYLE
+  // ========================================
+
+  const getStatusStyle = (
+    status: RentalRequest["status"]
+  ) => {
+    switch (status) {
+      case "PENDING":
+        return {
+          className:
+            "bg-yellow-50 text-yellow-700 border-yellow-200",
+          icon: Clock3,
+        };
+
+      case "APPROVED":
+        return {
+          className:
+            "bg-blue-50 text-blue-700 border-blue-200",
+          icon: CheckCircle2,
+        };
+
+      case "REJECTED":
+        return {
+          className:
+            "bg-red-50 text-red-700 border-red-200",
+          icon: XCircle,
+        };
+
+      case "ACTIVE":
+        return {
+          className:
+            "bg-cyan-50 text-cyan-700 border-cyan-200",
+          icon: CheckCircle2,
+        };
+
+      case "COMPLETED":
+        return {
+          className:
+            "bg-green-50 text-green-700 border-green-200",
+          icon: CheckCircle2,
+        };
+
+      case "CANCELLED":
+        return {
+          className:
+            "bg-gray-50 text-gray-600 border-gray-200",
+          icon: XCircle,
+        };
+
+      default:
+        return {
+          className:
+            "bg-gray-50 text-gray-600 border-gray-200",
+          icon: Clock3,
+        };
+    }
+  };
+
+  // ========================================
+  // STATS
+  // ========================================
+
+  const totalRequests =
+    rentalRequests.length;
+
+  const pendingRequests =
+    rentalRequests.filter(
+      (request) =>
+        request.status === "PENDING"
+    ).length;
+
+  const approvedRequests =
+    rentalRequests.filter(
+      (request) =>
+        request.status === "APPROVED"
+    ).length;
+
+  const activeRequests =
+    rentalRequests.filter(
+      (request) =>
+        request.status === "ACTIVE"
+    ).length;
+
+  const completedRequests =
+    rentalRequests.filter(
+      (request) =>
+        request.status === "COMPLETED"
+    ).length;
+
+  // ========================================
+  // LOADING
+  // ========================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white text-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+
+          <p className="text-gray-500">
+            Loading your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ========================================
+  // UI
+  // ========================================
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <aside className="hidden w-64 shrink-0 border-r border-gray-200 bg-white lg:flex lg:flex-col">
-          <div className="border-b border-gray-200 px-6 py-6">
-            <Link
-              href="/"
-              className="text-2xl font-bold tracking-tight text-blue-600"
-            >
-              RentNest
-            </Link>
+      {/* HEADER */}
 
-            <p className="mt-1 text-sm text-gray-500">Tenant Dashboard</p>
+      <header className="border-b border-gray-200 bg-white/95 backdrop-blur-xl sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-20 flex items-center justify-between">
+            <div>
+              <Link
+                href="/"
+                className="text-2xl font-bold tracking-tight text-gray-900"
+              >
+                Rent
+                <span className="text-blue-600">
+                  Nest
+                </span>
+              </Link>
+
+              <p className="text-xs text-gray-500 mt-1">
+                Tenant Dashboard
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {user && (
+                <div className="hidden sm:block text-right">
+                  <p className="text-sm font-medium text-gray-900">
+                    {user.name}
+                  </p>
+
+                  <p className="text-xs text-gray-500">
+                    {user.email}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
+              >
+                <LogOut size={16} />
+
+                Logout
+              </button>
+            </div>
           </div>
+        </div>
+      </header>
 
-          <nav className="flex-1 space-y-2 px-4 py-6">
-            <Link
-              href="/tenant/dashboard"
-              className="flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-600"
-            >
-              <Home className="h-5 w-5" />
-              Dashboard
-            </Link>
+      {/* MAIN */}
 
-            <Link
-              href="/properties"
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
-            >
-              <Search className="h-5 w-5" />
-              Browse Properties
-            </Link>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome */}
 
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-gray-400"
-            >
-              <ClipboardList className="h-5 w-5" />
-              Rental Requests
-            </button>
+        <div className="mb-8">
+          <p className="text-blue-600 text-sm font-medium mb-2">
+            Welcome back
+          </p>
 
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-gray-400"
-            >
-              <Heart className="h-5 w-5" />
-              Favorites
-            </button>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
+            {user?.name || "Tenant"}
+          </h1>
 
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-gray-400"
-            >
-              <User className="h-5 w-5" />
-              Profile
-            </button>
-          </nav>
+          <p className="text-gray-500 mt-2">
+            Manage your rental requests,
+            payments and reviews.
+          </p>
+        </div>
 
-          <div className="border-t border-gray-200 p-4">
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
-            >
-              <LogOut className="h-5 w-5" />
-              Logout
-            </button>
+        {/* ERROR */}
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+            <AlertCircle
+              className="text-red-500 shrink-0 mt-0.5"
+              size={20}
+            />
+
+            <div>
+              <p className="font-medium text-red-700">
+                Something went wrong
+              </p>
+
+              <p className="text-sm text-red-600 mt-1">
+                {error}
+              </p>
+            </div>
           </div>
-        </aside>
+        )}
 
-        {/* Main */}
-        <main className="min-w-0 flex-1">
-          {/* Header */}
-          <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur">
-            <div className="flex min-h-20 items-center justify-between px-5 py-4 sm:px-8">
-              <div>
-                <p className="text-sm text-gray-500">Welcome back,</p>
+        {/* SUCCESS */}
 
-                {isUserLoading ? (
-                  <div className="mt-1 h-7 w-40 animate-pulse rounded-lg bg-gray-200" />
-                ) : (
-                  <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                    {user?.name || "Tenant"}
-                  </h1>
-                )}
+        {success && (
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 flex items-start gap-3">
+            <CheckCircle2
+              className="text-green-500 shrink-0 mt-0.5"
+              size={20}
+            />
+
+            <p className="text-sm text-green-700">
+              {success}
+            </p>
+          </div>
+        )}
+
+        {/* REVIEW SUCCESS */}
+
+        {reviewSuccess && (
+          <div className="mb-6 rounded-xl border border-cyan-200 bg-cyan-50 p-4 flex items-start gap-3">
+            <Star
+              className="text-cyan-600 shrink-0 mt-0.5"
+              size={20}
+              fill="currentColor"
+            />
+
+            <p className="text-sm text-cyan-700">
+              {reviewSuccess}
+            </p>
+          </div>
+        )}
+
+        {/* STATS */}
+
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                <Home
+                  size={20}
+                  className="text-blue-600"
+                />
               </div>
 
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/properties"
-                  className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-600 sm:flex"
-                >
-                  <Search className="h-4 w-4" />
-                  Browse Properties
-                </Link>
+              <span className="text-2xl font-bold text-gray-900">
+                {totalRequests}
+              </span>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="rounded-xl border border-gray-200 p-2.5 text-gray-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                  title="Logout"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
+            <p className="text-sm text-gray-500">
+              Total Requests
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center">
+                <Clock3
+                  size={20}
+                  className="text-yellow-600"
+                />
+              </div>
+
+              <span className="text-2xl font-bold text-gray-900">
+                {pendingRequests}
+              </span>
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Pending
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                <CheckCircle2
+                  size={20}
+                  className="text-blue-600"
+                />
+              </div>
+
+              <span className="text-2xl font-bold text-gray-900">
+                {approvedRequests}
+              </span>
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Approved
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center">
+                <Home
+                  size={20}
+                  className="text-cyan-600"
+                />
+              </div>
+
+              <span className="text-2xl font-bold text-gray-900">
+                {activeRequests}
+              </span>
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Active
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                <Star
+                  size={20}
+                  className="text-green-600"
+                />
+              </div>
+
+              <span className="text-2xl font-bold text-gray-900">
+                {completedRequests}
+              </span>
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Completed
+            </p>
+          </div>
+        </div>
+
+        {/* NAVIGATION */}
+
+        <div className="flex flex-wrap gap-3 mb-8">
+          <Link
+            href="/properties"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-700"
+          >
+            <Home size={17} />
+
+            Browse Properties
+          </Link>
+
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
+          >
+            Back to Home
+          </Link>
+        </div>
+
+        {/* ACTIVE RENTALS */}
+
+        {activeRequests > 0 && (
+          <div className="mb-8 rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+            <div className="flex items-start gap-3">
+              <CheckCircle2
+                className="text-cyan-600 mt-0.5 shrink-0"
+                size={21}
+              />
+
+              <div>
+                <h3 className="font-semibold text-cyan-800">
+                  Active Rentals
+                </h3>
+
+                <p className="text-sm text-cyan-700/80 mt-1">
+                  You currently have{" "}
+                  {activeRequests} active rental
+                  {activeRequests !== 1
+                    ? "s"
+                    : ""}.
+                  You can leave a review from
+                  the rental request below.
+                </p>
               </div>
             </div>
-          </header>
+          </div>
+        )}
 
-          <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
-            {/* Mobile navigation */}
-            <div className="mb-6 flex gap-2 overflow-x-auto lg:hidden">
-              <Link
-                href="/tenant/dashboard"
-                className="flex shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
-              >
-                <Home className="h-4 w-4" />
-                Dashboard
-              </Link>
+        {/* COMPLETED */}
+
+        {completedRequests > 0 && (
+          <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+            <div className="flex items-start gap-3">
+              <CheckCircle2
+                className="text-green-600 mt-0.5 shrink-0"
+                size={21}
+              />
+
+              <div>
+                <h3 className="font-semibold text-green-800">
+                  Completed Rentals
+                </h3>
+
+                <p className="text-sm text-green-700/80 mt-1">
+                  You have completed{" "}
+                  {completedRequests} rental
+                  {completedRequests !== 1
+                    ? "s"
+                    : ""}.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REQUESTS */}
+
+        <section>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+                My Rental Requests
+              </h2>
+
+              <p className="text-sm text-gray-500 mt-1">
+                Track your property rental
+                requests and payments.
+              </p>
+            </div>
+          </div>
+
+          {rentalRequests.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+                <Home
+                  size={26}
+                  className="text-blue-600"
+                />
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No rental requests yet
+              </h3>
+
+              <p className="text-sm text-gray-500 mb-5">
+                Start browsing properties and
+                send your first rental request.
+              </p>
 
               <Link
                 href="/properties"
-                className="flex shrink-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 transition"
               >
-                <Search className="h-4 w-4" />
-                Properties
+                Browse Properties
               </Link>
-
-              <button
-                type="button"
-                className="flex shrink-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-400"
-              >
-                <Heart className="h-4 w-4" />
-                Favorites
-              </button>
             </div>
+          ) : (
+            <div className="space-y-5">
+              {rentalRequests.map(
+                (request) => {
+                  const statusStyle =
+                    getStatusStyle(
+                      request.status
+                    );
 
-            {/* User error */}
-            {userError && (
-              <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                {userError}
-              </div>
-            )}
+                  const StatusIcon =
+                    statusStyle.icon;
 
-            {/* Stats */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Total Requests
-                    </p>
+                  const isPaid =
+                    request.payment
+                      ?.status ===
+                    "COMPLETED";
 
-                    {isRequestsLoading ? (
-                      <div className="mt-2 h-9 w-12 animate-pulse rounded-lg bg-gray-200" />
-                    ) : (
-                      <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {stats.total}
-                      </p>
-                    )}
-                  </div>
+                  const canPay =
+                    request.status ===
+                      "APPROVED" &&
+                    !isPaid;
 
-                  <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-                    <ClipboardList className="h-6 w-6" />
-                  </div>
-                </div>
-              </div>
+                  const canReview =
+                    request.status ===
+                    "ACTIVE";
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Pending</p>
-
-                    {isRequestsLoading ? (
-                      <div className="mt-2 h-9 w-12 animate-pulse rounded-lg bg-gray-200" />
-                    ) : (
-                      <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {stats.pending}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl bg-amber-50 p-3 text-amber-600">
-                    <Clock3 className="h-6 w-6" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Approved
-                    </p>
-
-                    {isRequestsLoading ? (
-                      <div className="mt-2 h-9 w-12 animate-pulse rounded-lg bg-gray-200" />
-                    ) : (
-                      <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {stats.approved}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl bg-green-50 p-3 text-green-600">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Rejected
-                    </p>
-
-                    {isRequestsLoading ? (
-                      <div className="mt-2 h-9 w-12 animate-pulse rounded-lg bg-gray-200" />
-                    ) : (
-                      <p className="mt-2 text-3xl font-bold text-gray-900">
-                        {stats.rejected}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl bg-red-50 p-3 text-red-600">
-                    <XCircle className="h-6 w-6" />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Quick action */}
-            <section className="mt-8 rounded-2xl bg-blue-600 p-6 text-white shadow-sm sm:p-8">
-              <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-sm font-medium text-blue-100">
-                    Looking for a new place?
-                  </p>
-
-                  <h2 className="mt-1 text-2xl font-bold">
-                    Find your next home
-                  </h2>
-
-                  <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">
-                    Browse available properties and submit a rental request
-                    directly to the landlord.
-                  </p>
-                </div>
-
-                <Link
-                  href="/properties"
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-600 transition hover:bg-blue-50"
-                >
-                  Browse Properties
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </section>
-
-            {/* Rental Requests */}
-            <section className="mt-8">
-              <div className="mb-5 flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-blue-600">Activity</p>
-
-                  <h2 className="mt-1 text-2xl font-bold text-gray-900">
-                    My Rental Requests
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Track the properties you have requested.
-                  </p>
-                </div>
-              </div>
-
-              {/* Cancel success */}
-              {cancelSuccess && (
-                <div className="mb-5 flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" />
-                  {cancelSuccess}
-                </div>
-              )}
-
-              {/* Cancel error */}
-              {cancelError && (
-                <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                  <AlertCircle className="h-5 w-5 shrink-0" />
-                  {cancelError}
-                </div>
-              )}
-
-              {/* Payment error */}
-              {paymentError && (
-                <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                  <AlertCircle className="h-5 w-5 shrink-0" />
-                  {paymentError}
-                </div>
-              )}
-
-              {/* Loading */}
-              {isRequestsLoading && (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((item) => (
+                  return (
                     <div
-                      key={item}
-                      className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                      key={request.id}
+                      className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm"
                     >
-                      <div className="animate-pulse p-5">
-                        <div className="flex flex-col gap-5 md:flex-row">
-                          <div className="h-48 w-full rounded-xl bg-gray-200 md:h-36 md:w-52" />
+                      <div className="p-5 sm:p-6">
+                        {/* Property */}
 
-                          <div className="flex-1 space-y-4">
-                            <div className="h-6 w-2/3 rounded bg-gray-200" />
-                            <div className="h-4 w-1/3 rounded bg-gray-200" />
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                          <div className="flex gap-4 min-w-0">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-gray-100 overflow-hidden shrink-0">
+                              {request.property
+                                .imageUrl ? (
+                                <img
+                                  src={
+                                    request
+                                      .property
+                                      .imageUrl
+                                  }
+                                  alt={
+                                    request
+                                      .property
+                                      .title
+                                  }
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Home
+                                    size={26}
+                                    className="text-gray-400"
+                                  />
+                                </div>
+                              )}
+                            </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="h-10 rounded bg-gray-200" />
-                              <div className="h-10 rounded bg-gray-200" />
+                            <div className="min-w-0">
+                              <Link
+                                href={`/properties/${request.propertyId}`}
+                                className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition"
+                              >
+                                {
+                                  request
+                                    .property
+                                    .title
+                                }
+                              </Link>
+
+                              <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-2">
+                                <MapPin
+                                  size={15}
+                                />
+
+                                <span>
+                                  {
+                                    request
+                                      .property
+                                      .location
+                                  }
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-3">
+                                <span>
+                                  {
+                                    request
+                                      .property
+                                      .propertyType
+                                  }
+                                </span>
+
+                                <span>
+                                  {
+                                    request
+                                      .property
+                                      .bedrooms
+                                  }{" "}
+                                  Beds
+                                </span>
+
+                                <span>
+                                  {
+                                    request
+                                      .property
+                                      .bathrooms
+                                  }{" "}
+                                  Baths
+                                </span>
+                              </div>
                             </div>
                           </div>
+
+                          <div
+                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${statusStyle.className}`}
+                          >
+                            <StatusIcon
+                              size={14}
+                            />
+
+                            {request.status}
+                          </div>
+                        </div>
+
+                        {/* Details */}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 pt-5 border-t border-gray-100">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Monthly Rent
+                            </p>
+
+                            <p className="font-semibold text-gray-900">
+                              ৳
+                              {Number(
+                                request
+                                  .property
+                                  .price
+                              ).toLocaleString()}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Move-in Date
+                            </p>
+
+                            <div className="flex items-center gap-2">
+                              <CalendarDays
+                                size={15}
+                                className="text-gray-400"
+                              />
+
+                              <p className="font-medium text-sm text-gray-700">
+                                {new Date(
+                                  request.moveInDate
+                                ).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    year: "numeric",
+                                    month:
+                                      "short",
+                                    day: "numeric",
+                                  }
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Request Date
+                            </p>
+
+                            <p className="font-medium text-sm text-gray-700">
+                              {new Date(
+                                request.createdAt
+                              ).toLocaleDateString(
+                                "en-US",
+                                {
+                                  year: "numeric",
+                                  month:
+                                    "short",
+                                  day: "numeric",
+                                }
+                              )}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Payment
+                            </p>
+
+                            {isPaid ? (
+                              <div className="flex items-center gap-2 text-green-600">
+                                <CheckCircle2
+                                  size={15}
+                                />
+
+                                <span className="text-sm font-medium">
+                                  Completed
+                                </span>
+                              </div>
+                            ) : request.status ===
+                              "APPROVED" ? (
+                              <div className="flex items-center gap-2 text-yellow-600">
+                                <CreditCard
+                                  size={15}
+                                />
+
+                                <span className="text-sm font-medium">
+                                  Pending
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400">
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Message */}
+
+                        {request.message && (
+                          <div className="mt-5 rounded-xl bg-gray-50 border border-gray-100 p-4">
+                            <div className="flex items-start gap-2">
+                              <MessageSquare
+                                size={16}
+                                className="text-gray-400 mt-0.5 shrink-0"
+                              />
+
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">
+                                  Your message
+                                </p>
+
+                                <p className="text-sm text-gray-600">
+                                  {
+                                    request.message
+                                  }
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ACTIONS */}
+
+                        <div className="flex flex-wrap items-center gap-3 mt-6">
+                          <Link
+                            href={`/properties/${request.propertyId}`}
+                            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition"
+                          >
+                            View Property
+                          </Link>
+
+                          {canPay && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePayment(
+                                  request.id
+                                )
+                              }
+                              disabled={
+                                payingId ===
+                                request.id
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {payingId ===
+                              request.id ? (
+                                <>
+                                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard
+                                    size={16}
+                                  />
+
+                                  Pay Now
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {request.status ===
+                            "APPROVED" &&
+                            isPaid && (
+                              <div className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700">
+                                <CheckCircle2
+                                  size={16}
+                                />
+
+                                Payment Completed
+                              </div>
+                            )}
+
+                          {canReview && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleOpenReview(
+                                  request
+                                )
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-700 transition"
+                            >
+                              <Star size={16} />
+
+                              Leave Review
+                            </button>
+                          )}
+
+                          {request.status ===
+                            "COMPLETED" && (
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700">
+                              <CheckCircle2
+                                size={16}
+                              />
+
+                              Review Completed
+                            </div>
+                          )}
+
+                          {request.status ===
+                            "PENDING" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCancelRequest(
+                                  request.id
+                                )
+                              }
+                              disabled={
+                                cancellingId ===
+                                request.id
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {cancellingId ===
+                              request.id ? (
+                                <>
+                                  <span className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
+
+                                  Cancelling...
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle
+                                    size={16}
+                                  />
+
+                                  Cancel Request
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                }
+              )}
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* REVIEW MODAL */}
+
+      {reviewingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close review modal"
+            onClick={handleCloseReview}
+            disabled={reviewSubmitting}
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-default"
+          />
+
+          <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <div>
+                <p className="text-xs text-cyan-600 font-medium mb-1">
+                  Complete Rental
+                </p>
+
+                <h2 className="text-xl font-bold text-gray-900">
+                  Leave a Review
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseReview}
+                disabled={reviewSubmitting}
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+
+            <div className="p-5">
+              {/* Property */}
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 mb-6">
+                <p className="text-xs text-gray-500 mb-1">
+                  Property
+                </p>
+
+                <p className="font-semibold text-gray-900">
+                  {
+                    reviewingRequest
+                      .property.title
+                  }
+                </p>
+
+                <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
+                  <MapPin size={14} />
+
+                  {
+                    reviewingRequest
+                      .property.location
+                  }
+                </div>
+              </div>
+
+              {/* Rating */}
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Your Rating
+                </label>
+
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map(
+                    (rating) => (
+                      <button
+                        key={rating}
+                        type="button"
+                        onClick={() =>
+                          setReviewRating(
+                            rating
+                          )
+                        }
+                        disabled={
+                          reviewSubmitting
+                        }
+                        className="p-1 transition-transform hover:scale-110 disabled:cursor-not-allowed"
+                        aria-label={`Rate ${rating} out of 5`}
+                      >
+                        <Star
+                          size={32}
+                          className={
+                            rating <=
+                            reviewRating
+                              ? "text-yellow-400"
+                              : "text-gray-300"
+                          }
+                          fill={
+                            rating <=
+                            reviewRating
+                              ? "currentColor"
+                              : "none"
+                          }
+                        />
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  {reviewRating} out of 5 stars
+                </p>
+              </div>
+
+              {/* Comment */}
+
+              <div className="mb-5">
+                <label
+                  htmlFor="review-comment"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
+                  Your Review
+                </label>
+
+                <textarea
+                  id="review-comment"
+                  value={reviewComment}
+                  onChange={(event) =>
+                    setReviewComment(
+                      event.target.value
+                    )
+                  }
+                  disabled={
+                    reviewSubmitting
+                  }
+                  rows={5}
+                  placeholder="Share your experience with this rental property..."
+                  className="w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 disabled:opacity-50"
+                />
+              </div>
+
+              {/* Review Error */}
+
+              {reviewError && (
+                <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+                  <AlertCircle
+                    size={18}
+                    className="text-red-500 mt-0.5 shrink-0"
+                  />
+
+                  <p className="text-sm text-red-600">
+                    {reviewError}
+                  </p>
                 </div>
               )}
 
-              {/* Error */}
-              {!isRequestsLoading && requestsError && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+              {/* Information */}
 
-                    <div>
-                      <h3 className="font-semibold text-red-800">
-                        Unable to load rental requests
-                      </h3>
+              <div className="mb-5 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+                <p className="text-xs text-cyan-700 leading-relaxed">
+                  After submitting your
+                  review, this rental will
+                  be marked as completed.
+                </p>
+              </div>
 
-                      <p className="mt-1 text-sm text-red-700">
-                        {requestsError}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Buttons */}
 
-              {/* Empty */}
-              {!isRequestsLoading &&
-                !requestsError &&
-                rentalRequests.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                      <ClipboardList className="h-7 w-7" />
-                    </div>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseReview}
+                  disabled={
+                    reviewSubmitting
+                  }
+                  className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
 
-                    <h3 className="mt-4 text-lg font-bold text-gray-900">
-                      No rental requests yet
-                    </h3>
+                <button
+                  type="button"
+                  onClick={
+                    handleSubmitReview
+                  }
+                  disabled={
+                    reviewSubmitting
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 text-sm font-medium text-white hover:bg-cyan-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {reviewSubmitting ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
 
-                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
-                      You have not submitted any rental requests. Browse
-                      available properties and find your next home.
-                    </p>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Star
+                        size={16}
+                        fill="currentColor"
+                      />
 
-                    <Link
-                      href="/properties"
-                      className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-                    >
-                      Browse Properties
-                      <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </div>
-                )}
-
-              {/* Request list */}
-              {!isRequestsLoading &&
-                !requestsError &&
-                rentalRequests.length > 0 && (
-                  <div className="space-y-4">
-                    {rentalRequests.map((request) => {
-                      const status = getStatusStyles(request.status);
-
-                      const StatusIcon = status.icon;
-
-                      const isPaid =
-                        request.payment?.status === "COMPLETED" ||
-                        request.payment?.status === "PAID";
-
-                      const isPaying = payingId === request.id;
-
-                      return (
-                        <div
-                          key={request.id}
-                          className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md"
-                        >
-                          <div className="p-5">
-                            <div className="flex flex-col gap-5 md:flex-row">
-                              {/* Property Image */}
-                              <div className="h-52 w-full shrink-0 overflow-hidden rounded-xl bg-gray-100 md:h-36 md:w-52">
-                                {request.property?.imageUrl ? (
-                                  <img
-                                    src={request.property.imageUrl}
-                                    alt={request.property.title}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-gray-400">
-                                    <Home className="h-10 w-10" />
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Content */}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-col justify-between gap-3 sm:flex-row">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <h3 className="truncate text-lg font-bold text-gray-900">
-                                        {request.property?.title}
-                                      </h3>
-
-                                      <span
-                                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}
-                                      >
-                                        <StatusIcon className="h-3.5 w-3.5" />
-                                        {status.label}
-                                      </span>
-
-                                      {isPaid && (
-                                        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                                          <CheckCircle2 className="h-3.5 w-3.5" />
-                                          Paid
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-2 flex items-center gap-1.5 text-sm text-gray-500">
-                                      <MapPin className="h-4 w-4 shrink-0" />
-
-                                      <span className="truncate">
-                                        {request.property?.location}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="shrink-0">
-                                    <p className="text-lg font-bold text-blue-600">
-                                      {formatCurrency(
-                                        request.property?.price || 0,
-                                      )}
-                                    </p>
-
-                                    <p className="text-right text-xs text-gray-400">
-                                      / month
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Property details */}
-                                <div className="mt-4 flex flex-wrap gap-3 text-sm text-gray-600">
-                                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2">
-                                    <Home className="h-4 w-4 text-gray-400" />
-                                    {request.property?.propertyType}
-                                  </span>
-
-                                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2">
-                                    <BedDouble className="h-4 w-4 text-gray-400" />
-                                    {request.property?.bedrooms} Beds
-                                  </span>
-
-                                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2">
-                                    <Bath className="h-4 w-4 text-gray-400" />
-                                    {request.property?.bathrooms} Baths
-                                  </span>
-                                </div>
-
-                                {/* Request information */}
-                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
-                                      <CalendarDays className="h-4 w-4" />
-                                      Move-in Date
-                                    </div>
-
-                                    <p className="mt-1 text-sm font-semibold text-gray-900">
-                                      {formatDate(request.moveInDate)}
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                                    <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
-                                      <Clock3 className="h-4 w-4" />
-                                      Requested On
-                                    </div>
-
-                                    <p className="mt-1 text-sm font-semibold text-gray-900">
-                                      {formatDate(request.createdAt)}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Payment information */}
-                                {isPaid && request.payment && (
-                                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                                    <div className="flex items-start gap-3">
-                                      <div className="rounded-lg bg-white p-2 text-blue-600">
-                                        <DollarSign className="h-5 w-5" />
-                                      </div>
-
-                                      <div>
-                                        <p className="text-sm font-semibold text-blue-800">
-                                          Payment completed
-                                        </p>
-
-                                        <p className="mt-1 text-sm text-blue-700">
-                                          {formatCurrency(
-                                            Number(
-                                              request.payment.amount ||
-                                                request.property?.price ||
-                                                0,
-                                            ),
-                                          )}{" "}
-                                          payment has been completed.
-                                        </p>
-
-                                        {request.payment.createdAt && (
-                                          <p className="mt-1 text-xs text-blue-600">
-                                            Paid on{" "}
-                                            {formatDate(
-                                              request.payment.createdAt,
-                                            )}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Message */}
-                                {request.message && (
-                                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
-                                    <p className="text-xs font-semibold text-blue-700">
-                                      Your message
-                                    </p>
-
-                                    <p className="mt-1 text-sm leading-6 text-blue-900">
-                                      {request.message}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {/* Actions */}
-                                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                                  <Link
-                                    href={`/properties/${request.property?.id}`}
-                                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 transition hover:text-blue-700"
-                                  >
-                                    View Property
-                                    <ChevronRight className="h-4 w-4" />
-                                  </Link>
-
-                                  <div className="flex flex-wrap items-center gap-3">
-                                    {/* Pay Now */}
-                                    {request.status === "APPROVED" &&
-                                      !isPaid && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handlePayNow(request.id)
-                                          }
-                                          disabled={isPaying}
-                                          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                        >
-                                          {isPaying ? (
-                                            <>
-                                              <Loader2 className="h-4 w-4 animate-spin" />
-                                              Redirecting...
-                                            </>
-                                          ) : (
-                                            <>
-                                              <CreditCard className="h-4 w-4" />
-                                              Pay Now
-                                            </>
-                                          )}
-                                        </button>
-                                      )}
-
-                                    {/* Payment completed */}
-                                    {request.status === "APPROVED" &&
-                                      isPaid && (
-                                        <span className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-700">
-                                          <CheckCircle2 className="h-4 w-4" />
-                                          Payment Completed
-                                        </span>
-                                      )}
-
-                                    {/* Cancel */}
-                                    {request.status === "PENDING" && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleCancelRequest(request.id)
-                                        }
-                                        disabled={cancellingId === request.id}
-                                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                      >
-                                        {cancellingId === request.id ? (
-                                          <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Cancelling...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Ban className="h-4 w-4" />
-                                            Cancel Request
-                                          </>
-                                        )}
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-            </section>
+                      Submit Review
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
-        </main>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
