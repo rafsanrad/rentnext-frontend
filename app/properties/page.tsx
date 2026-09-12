@@ -33,6 +33,18 @@ interface WatchlistResponse {
   data: WatchlistItem[];
 }
 
+interface Category {
+  id: string;
+  name: string;
+  description?: string | null;
+}
+
+interface CategoriesResponse {
+  success: boolean;
+  message: string;
+  data: Category[];
+}
+
 const initialFilters: PropertyFilters = {
   search: "",
   location: "",
@@ -83,6 +95,10 @@ async function getProperties(
     : "/properties";
 
   return apiFetch<PropertiesResponse>(endpoint);
+}
+
+async function getCategories(): Promise<CategoriesResponse> {
+  return apiFetch<CategoriesResponse>("/categories");
 }
 
 function getAuthHeaders(): Record<string, string> {
@@ -280,13 +296,32 @@ export default function PropertiesPage() {
   const [watchlistMessage, setWatchlistMessage] =
     useState("");
 
-  const { data, isLoading, isError, error, refetch } =
-    useQuery({
-      queryKey: ["properties", appliedFilters],
-      queryFn: () => getProperties(appliedFilters),
-    });
+  const {
+    data: propertiesData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["properties", appliedFilters],
+    queryFn: () => getProperties(appliedFilters),
+  });
 
-  const properties = data?.data ?? [];
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+  } = useQuery({
+    queryKey: ["categories"],
+    queryFn: getCategories,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const properties =
+    propertiesData?.data ?? [];
+
+  const categories =
+    categoriesData?.data ?? [];
 
   // ========================================
   // LOAD WATCHLIST
@@ -321,7 +356,10 @@ export default function PropertiesPage() {
         const data: WatchlistResponse =
           await response.json();
 
-        if (!data.success || !Array.isArray(data.data)) {
+        if (
+          !data.success ||
+          !Array.isArray(data.data)
+        ) {
           return;
         }
 
@@ -392,7 +430,9 @@ export default function PropertiesPage() {
 
         setWatchlistIds((current) => {
           const next = new Set(current);
+
           next.delete(propertyId);
+
           return next;
         });
 
@@ -427,7 +467,9 @@ export default function PropertiesPage() {
 
         setWatchlistIds((current) => {
           const next = new Set(current);
+
           next.add(propertyId);
+
           return next;
         });
 
@@ -458,6 +500,10 @@ export default function PropertiesPage() {
       setWatchlistLoadingId(null);
     }
   };
+
+  // ========================================
+  // FILTER HANDLERS
+  // ========================================
 
   const handleFilterChange = (
     field: keyof PropertyFilters,
@@ -601,14 +647,71 @@ export default function PropertiesPage() {
                 }
                 className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
-                <option value="">All Types</option>
+                <option value="">
+                  All Types
+                </option>
+
                 <option value="Apartment">
                   Apartment
                 </option>
-                <option value="House">House</option>
-                <option value="Room">Room</option>
-                <option value="Studio">Studio</option>
+
+                <option value="House">
+                  House
+                </option>
+
+                <option value="Room">
+                  Room
+                </option>
+
+                <option value="Studio">
+                  Studio
+                </option>
               </select>
+            </div>
+
+            {/* Category */}
+            <div className="mt-5">
+              <label
+                htmlFor="categoryId"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Category
+              </label>
+
+              <select
+                id="categoryId"
+                value={filters.categoryId}
+                onChange={(event) =>
+                  handleFilterChange(
+                    "categoryId",
+                    event.target.value
+                  )
+                }
+                disabled={categoriesLoading}
+                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">
+                  {categoriesLoading
+                    ? "Loading categories..."
+                    : "All Categories"}
+                </option>
+
+                {!categoriesError &&
+                  categories.map((category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                    >
+                      {category.name}
+                    </option>
+                  ))}
+              </select>
+
+              {categoriesError && (
+                <p className="mt-2 text-xs text-red-500">
+                  Failed to load categories.
+                </p>
+              )}
             </div>
 
             {/* Minimum Price */}
@@ -681,12 +784,29 @@ export default function PropertiesPage() {
                 }
                 className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
-                <option value="">Any</option>
-                <option value="1">1+ Bedroom</option>
-                <option value="2">2+ Bedrooms</option>
-                <option value="3">3+ Bedrooms</option>
-                <option value="4">4+ Bedrooms</option>
-                <option value="5">5+ Bedrooms</option>
+                <option value="">
+                  Any
+                </option>
+
+                <option value="1">
+                  1+ Bedroom
+                </option>
+
+                <option value="2">
+                  2+ Bedrooms
+                </option>
+
+                <option value="3">
+                  3+ Bedrooms
+                </option>
+
+                <option value="4">
+                  4+ Bedrooms
+                </option>
+
+                <option value="5">
+                  5+ Bedrooms
+                </option>
               </select>
             </div>
 
@@ -733,7 +853,9 @@ export default function PropertiesPage() {
               <div className="grid gap-6 md:grid-cols-2">
                 {Array.from({ length: 6 }).map(
                   (_, index) => (
-                    <PropertySkeleton key={index} />
+                    <PropertySkeleton
+                      key={index}
+                    />
                   )
                 )}
               </div>
@@ -767,15 +889,17 @@ export default function PropertiesPage() {
               !isError &&
               properties.length === 0 && (
                 <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-                  <div className="text-4xl">🏠</div>
+                  <div className="text-4xl">
+                    🏠
+                  </div>
 
                   <h3 className="mt-4 text-xl font-semibold text-slate-900">
                     No properties found
                   </h3>
 
                   <p className="mt-2 text-slate-500">
-                    Try changing your search or filter
-                    options.
+                    Try changing your search or
+                    filter options.
                   </p>
 
                   <button
@@ -793,22 +917,24 @@ export default function PropertiesPage() {
               !isError &&
               properties.length > 0 && (
                 <div className="grid gap-6 md:grid-cols-2">
-                  {properties.map((property) => (
-                    <PropertyCard
-                      key={property.id}
-                      property={property}
-                      isInWatchlist={watchlistIds.has(
-                        property.id
-                      )}
-                      watchlistLoading={
-                        watchlistLoadingId ===
-                        property.id
-                      }
-                      onToggleWatchlist={
-                        handleToggleWatchlist
-                      }
-                    />
-                  ))}
+                  {properties.map(
+                    (property) => (
+                      <PropertyCard
+                        key={property.id}
+                        property={property}
+                        isInWatchlist={watchlistIds.has(
+                          property.id
+                        )}
+                        watchlistLoading={
+                          watchlistLoadingId ===
+                          property.id
+                        }
+                        onToggleWatchlist={
+                          handleToggleWatchlist
+                        }
+                      />
+                    )
+                  )}
                 </div>
               )}
           </div>
