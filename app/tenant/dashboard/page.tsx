@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertCircle,
   ChevronRight,
+  CreditCard,
 } from "lucide-react";
 
 interface UserData {
@@ -76,6 +77,15 @@ interface RentalRequestsResponse {
   success: boolean;
   message: string;
   data: RentalRequest[];
+}
+
+interface CheckoutResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    sessionId: string;
+    checkoutUrl: string | null;
+  };
 }
 
 const formatCurrency = (price: number) => {
@@ -155,6 +165,10 @@ export default function TenantDashboardPage() {
 
   const [cancelError, setCancelError] = useState("");
 
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  const [paymentError, setPaymentError] = useState("");
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -191,51 +205,40 @@ export default function TenantDashboardPage() {
 
   useEffect(() => {
     const fetchRentalRequests = async () => {
-  try {
-    setIsRequestsLoading(true);
-    setRequestsError("");
+      try {
+        setIsRequestsLoading(true);
+        setRequestsError("");
 
-    const response = await fetch(
-      "/api/rental-requests/my",
-      {
-        method: "GET",
-        cache: "no-store",
+        const response = await fetch("/api/rental-requests/my", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const data: RentalRequestsResponse = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || "Unable to load rental requests.");
+        }
+
+        // Cancelled requests remain in the database,
+        // but should not appear on the tenant dashboard.
+        const activeRequests = (data.data || []).filter(
+          (request) => request.status !== "CANCELLED",
+        );
+
+        setRentalRequests(activeRequests);
+      } catch (error) {
+        console.error("Rental requests error:", error);
+
+        setRequestsError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load rental requests.",
+        );
+      } finally {
+        setIsRequestsLoading(false);
       }
-    );
-
-    const data: RentalRequestsResponse =
-      await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(
-        data.message ||
-          "Unable to load rental requests."
-      );
-    }
-
-    // Only show active rental requests.
-    // Cancelled requests remain in the database
-    // but should not appear on the tenant dashboard.
-    const activeRequests = (data.data || []).filter(
-      (request) => request.status !== "CANCELLED"
-    );
-
-    setRentalRequests(activeRequests);
-  } catch (error) {
-    console.error(
-      "Rental requests error:",
-      error
-    );
-
-    setRequestsError(
-      error instanceof Error
-        ? error.message
-        : "Unable to load rental requests."
-    );
-  } finally {
-    setIsRequestsLoading(false);
-  }
-};
+    };
 
     fetchRentalRequests();
   }, []);
@@ -285,7 +288,7 @@ export default function TenantDashboardPage() {
         throw new Error(data.message || "Failed to cancel rental request.");
       }
 
-      // Remove the cancelled request from the dashboard
+      // Remove cancelled request from the dashboard immediately.
       setRentalRequests((currentRequests) =>
         currentRequests.filter((request) => request.id !== requestId),
       );
@@ -305,6 +308,47 @@ export default function TenantDashboardPage() {
       );
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handlePayNow = async (requestId: string) => {
+    try {
+      setPayingId(requestId);
+      setPaymentError("");
+
+      const response = await fetch("/api/payments/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rentalRequestId: requestId,
+        }),
+        cache: "no-store",
+      });
+
+      const data: CheckoutResponse = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to create payment session.");
+      }
+
+      const checkoutUrl = data.data?.checkoutUrl;
+
+      if (!checkoutUrl) {
+        throw new Error("Stripe checkout URL was not returned by the server.");
+      }
+
+      // Redirect to Stripe Checkout
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      console.error("Payment error:", error);
+
+      setPaymentError(
+        error instanceof Error ? error.message : "Unable to start payment.",
+      );
+
+      setPayingId(null);
     }
   };
 
@@ -597,7 +641,7 @@ export default function TenantDashboardPage() {
                 </div>
               </div>
 
-              {/* Success message */}
+              {/* Cancel success */}
               {cancelSuccess && (
                 <div className="mb-5 flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
                   <CheckCircle2 className="h-5 w-5 shrink-0" />
@@ -605,11 +649,19 @@ export default function TenantDashboardPage() {
                 </div>
               )}
 
-              {/* Error message */}
+              {/* Cancel error */}
               {cancelError && (
                 <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   {cancelError}
+                </div>
+              )}
+
+              {/* Payment error */}
+              {paymentError && (
+                <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  {paymentError}
                 </div>
               )}
 
@@ -628,6 +680,7 @@ export default function TenantDashboardPage() {
                           <div className="flex-1 space-y-4">
                             <div className="h-6 w-2/3 rounded bg-gray-200" />
                             <div className="h-4 w-1/3 rounded bg-gray-200" />
+
                             <div className="grid grid-cols-2 gap-3">
                               <div className="h-10 rounded bg-gray-200" />
                               <div className="h-10 rounded bg-gray-200" />
@@ -697,6 +750,12 @@ export default function TenantDashboardPage() {
 
                       const StatusIcon = status.icon;
 
+                      const isPaid =
+                        request.payment?.status === "COMPLETED" ||
+                        request.payment?.status === "PAID";
+
+                      const isPaying = payingId === request.id;
+
                       return (
                         <div
                           key={request.id}
@@ -734,6 +793,13 @@ export default function TenantDashboardPage() {
                                         <StatusIcon className="h-3.5 w-3.5" />
                                         {status.label}
                                       </span>
+
+                                      {isPaid && (
+                                        <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                          <CheckCircle2 className="h-3.5 w-3.5" />
+                                          Paid
+                                        </span>
+                                      )}
                                     </div>
 
                                     <div className="mt-2 flex items-center gap-1.5 text-sm text-gray-500">
@@ -801,6 +867,43 @@ export default function TenantDashboardPage() {
                                   </div>
                                 </div>
 
+                                {/* Payment information */}
+                                {isPaid && request.payment && (
+                                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                                    <div className="flex items-start gap-3">
+                                      <div className="rounded-lg bg-white p-2 text-blue-600">
+                                        <DollarSign className="h-5 w-5" />
+                                      </div>
+
+                                      <div>
+                                        <p className="text-sm font-semibold text-blue-800">
+                                          Payment completed
+                                        </p>
+
+                                        <p className="mt-1 text-sm text-blue-700">
+                                          {formatCurrency(
+                                            Number(
+                                              request.payment.amount ||
+                                                request.property?.price ||
+                                                0,
+                                            ),
+                                          )}{" "}
+                                          payment has been completed.
+                                        </p>
+
+                                        {request.payment.createdAt && (
+                                          <p className="mt-1 text-xs text-blue-600">
+                                            Paid on{" "}
+                                            {formatDate(
+                                              request.payment.createdAt,
+                                            )}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Message */}
                                 {request.message && (
                                   <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
@@ -824,28 +927,65 @@ export default function TenantDashboardPage() {
                                     <ChevronRight className="h-4 w-4" />
                                   </Link>
 
-                                  {request.status === "PENDING" && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleCancelRequest(request.id)
-                                      }
-                                      disabled={cancellingId === request.id}
-                                      className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                      {cancellingId === request.id ? (
-                                        <>
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          Cancelling...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Ban className="h-4 w-4" />
-                                          Cancel Request
-                                        </>
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    {/* Pay Now */}
+                                    {request.status === "APPROVED" &&
+                                      !isPaid && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handlePayNow(request.id)
+                                          }
+                                          disabled={isPaying}
+                                          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          {isPaying ? (
+                                            <>
+                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                              Redirecting...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <CreditCard className="h-4 w-4" />
+                                              Pay Now
+                                            </>
+                                          )}
+                                        </button>
                                       )}
-                                    </button>
-                                  )}
+
+                                    {/* Payment completed */}
+                                    {request.status === "APPROVED" &&
+                                      isPaid && (
+                                        <span className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-700">
+                                          <CheckCircle2 className="h-4 w-4" />
+                                          Payment Completed
+                                        </span>
+                                      )}
+
+                                    {/* Cancel */}
+                                    {request.status === "PENDING" && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleCancelRequest(request.id)
+                                        }
+                                        disabled={cancellingId === request.id}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {cancellingId === request.id ? (
+                                          <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Cancelling...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Ban className="h-4 w-4" />
+                                            Cancel Request
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>

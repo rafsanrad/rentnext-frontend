@@ -30,10 +30,7 @@ interface Property {
   bathrooms: number;
   amenities: string[];
   imageUrl?: string | null;
-  status:
-    | "AVAILABLE"
-    | "RENTED"
-    | "UNAVAILABLE";
+  status: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
   landlordId?: string;
   categoryId: string;
   category?: Category;
@@ -57,11 +54,7 @@ interface RentalRequest {
   id: string;
   moveInDate: string;
   message?: string | null;
-  status:
-    | "PENDING"
-    | "APPROVED"
-    | "REJECTED"
-    | "CANCELLED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   createdAt: string;
   property: {
     id: string;
@@ -109,10 +102,7 @@ interface PropertyFormData {
   amenities: string;
   imageUrl: string;
   categoryId: string;
-  status:
-    | "AVAILABLE"
-    | "RENTED"
-    | "UNAVAILABLE";
+  status: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
 }
 
 const initialFormData: PropertyFormData = {
@@ -135,89 +125,66 @@ async function fetchUser(): Promise<User> {
     cache: "no-store",
   });
 
-  const data: MeResponse =
-    await response.json();
+  const data: MeResponse = await response.json();
 
   if (!response.ok || !data.success) {
     throw new Error(
-      data.message ||
-        "Unable to load user information."
+      data.message || "Unable to load user information."
     );
   }
 
   return data.data;
 }
 
-async function fetchRentalRequests(): Promise<
-  RentalRequest[]
-> {
-  const response = await fetch(
-    "/api/landlord/rental-requests",
-    {
-      method: "GET",
-      cache: "no-store",
-    }
-  );
+async function fetchRentalRequests(): Promise<RentalRequest[]> {
+  const response = await fetch("/api/landlord/rental-requests", {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const data: RentalRequestsResponse =
-    await response.json();
+  const data: RentalRequestsResponse = await response.json();
 
   if (!response.ok || !data.success) {
     throw new Error(
-      data.message ||
-        "Unable to load rental requests."
+      data.message || "Unable to load rental requests."
     );
   }
 
   return data.data || [];
 }
 
-async function fetchMyProperties(): Promise<
-  Property[]
-> {
-  const response = await fetch(
-    "/api/landlord/properties",
-    {
-      method: "GET",
-      cache: "no-store",
-    }
-  );
+async function fetchMyProperties(): Promise<Property[]> {
+  const response = await fetch("/api/landlord/properties", {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const data: PropertiesResponse =
-    await response.json();
+  const data: PropertiesResponse = await response.json();
 
   if (!response.ok || !data.success) {
     throw new Error(
-      data.message ||
-        "Unable to load your properties."
+      data.message || "Unable to load your properties."
     );
   }
 
   return data.data || [];
 }
 
-async function fetchCategories(): Promise<
-  Category[]
-> {
+async function fetchCategories(): Promise<Category[]> {
   const apiUrl =
     process.env.NEXT_PUBLIC_API_URL ||
     "http://localhost:8000/api";
 
-  const response = await fetch(
-    `${apiUrl}/categories`,
-    {
-      method: "GET",
-      cache: "no-store",
-    }
-  );
+  const response = await fetch(`${apiUrl}/categories`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const data: CategoriesResponse =
-    await response.json();
+  const data: CategoriesResponse = await response.json();
 
   if (!response.ok || !data.success) {
     throw new Error(
-      data.message ||
-        "Unable to load categories."
+      data.message || "Unable to load categories."
     );
   }
 
@@ -231,22 +198,17 @@ export default function LandlordDashboardPage() {
   const [propertyActionLoading, setPropertyActionLoading] =
     useState(false);
 
-  const [successMessage, setSuccessMessage] =
-    useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const [propertyError, setPropertyError] =
-    useState("");
+  const [propertyError, setPropertyError] = useState("");
 
-  const [showPropertyForm, setShowPropertyForm] =
-    useState(false);
+  const [showPropertyForm, setShowPropertyForm] = useState(false);
 
   const [editingProperty, setEditingProperty] =
     useState<Property | null>(null);
 
   const [formData, setFormData] =
-    useState<PropertyFormData>(
-      initialFormData
-    );
+    useState<PropertyFormData>(initialFormData);
 
   const {
     data: user,
@@ -299,47 +261,43 @@ export default function LandlordDashboardPage() {
     categoriesError?.message ||
     "";
 
-  const pendingRequests = useMemo(
+  // Cancelled requests are hidden from landlord dashboard
+  const activeRequests = useMemo(
     () =>
       rentalRequests.filter(
-        (request) =>
-          request.status === "PENDING"
+        (request) => request.status !== "CANCELLED"
       ),
     [rentalRequests]
+  );
+
+  const pendingRequests = useMemo(
+    () =>
+      activeRequests.filter(
+        (request) => request.status === "PENDING"
+      ),
+    [activeRequests]
   );
 
   const approvedRequests = useMemo(
     () =>
-      rentalRequests.filter(
-        (request) =>
-          request.status === "APPROVED"
+      activeRequests.filter(
+        (request) => request.status === "APPROVED"
       ),
-    [rentalRequests]
+    [activeRequests]
   );
 
   const rejectedRequests = useMemo(
     () =>
-      rentalRequests.filter(
-        (request) =>
-          request.status === "REJECTED"
+      activeRequests.filter(
+        (request) => request.status === "REJECTED"
       ),
-    [rentalRequests]
-  );
-
-  const activeRequests = useMemo(
-    () =>
-      rentalRequests.filter(
-        (request) =>
-          request.status !== "CANCELLED"
-      ),
-    [rentalRequests]
+    [activeRequests]
   );
 
   const availableProperties = useMemo(
     () =>
       properties.filter(
-        (property) =>
-          property.status === "AVAILABLE"
+        (property) => property.status === "AVAILABLE"
       ),
     [properties]
   );
@@ -347,8 +305,7 @@ export default function LandlordDashboardPage() {
   const rentedProperties = useMemo(
     () =>
       properties.filter(
-        (property) =>
-          property.status === "RENTED"
+        (property) => property.status === "RENTED"
       ),
     [properties]
   );
@@ -366,9 +323,7 @@ export default function LandlordDashboardPage() {
     setFormData({
       ...initialFormData,
       categoryId:
-        categories.length > 0
-          ? categories[0].id
-          : "",
+        categories.length > 0 ? categories[0].id : "",
     });
 
     setPropertyError("");
@@ -376,9 +331,7 @@ export default function LandlordDashboardPage() {
     setShowPropertyForm(true);
   };
 
-  const openEditPropertyForm = (
-    property: Property
-  ) => {
+  const openEditPropertyForm = (property: Property) => {
     setEditingProperty(property);
 
     setFormData({
@@ -389,8 +342,7 @@ export default function LandlordDashboardPage() {
       propertyType: property.propertyType,
       bedrooms: String(property.bedrooms),
       bathrooms: String(property.bathrooms),
-      amenities:
-        property.amenities?.join(", ") || "",
+      amenities: property.amenities?.join(", ") || "",
       imageUrl: property.imageUrl || "",
       categoryId: property.categoryId,
       status: property.status,
@@ -422,68 +374,43 @@ export default function LandlordDashboardPage() {
       setSuccessMessage("");
 
       if (!formData.title.trim()) {
-        throw new Error(
-          "Property title is required."
-        );
+        throw new Error("Property title is required.");
       }
 
       if (!formData.description.trim()) {
-        throw new Error(
-          "Property description is required."
-        );
+        throw new Error("Property description is required.");
       }
 
       if (!formData.location.trim()) {
-        throw new Error(
-          "Property location is required."
-        );
+        throw new Error("Property location is required.");
       }
 
       const price = Number(formData.price);
-      const bedrooms = Number(
-        formData.bedrooms
-      );
-      const bathrooms = Number(
-        formData.bathrooms
-      );
+      const bedrooms = Number(formData.bedrooms);
+      const bathrooms = Number(formData.bathrooms);
 
-      if (
-        !Number.isFinite(price) ||
-        price <= 0
-      ) {
-        throw new Error(
-          "Please enter a valid price."
-        );
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("Please enter a valid price.");
       }
 
-      if (
-        !Number.isInteger(bedrooms) ||
-        bedrooms < 0
-      ) {
+      if (!Number.isInteger(bedrooms) || bedrooms < 0) {
         throw new Error(
           "Please enter a valid number of bedrooms."
         );
       }
 
-      if (
-        !Number.isInteger(bathrooms) ||
-        bathrooms < 0
-      ) {
+      if (!Number.isInteger(bathrooms) || bathrooms < 0) {
         throw new Error(
           "Please enter a valid number of bathrooms."
         );
       }
 
       if (!formData.propertyType.trim()) {
-        throw new Error(
-          "Property type is required."
-        );
+        throw new Error("Property type is required.");
       }
 
       if (!formData.categoryId) {
-        throw new Error(
-          "Please select a category."
-        );
+        throw new Error("Please select a category.");
       }
 
       const amenities = formData.amenities
@@ -492,9 +419,7 @@ export default function LandlordDashboardPage() {
         .filter(Boolean);
 
       if (amenities.length === 0) {
-        throw new Error(
-          "Please add at least one amenity."
-        );
+        throw new Error("Please add at least one amenity.");
       }
 
       const payload: {
@@ -508,19 +433,13 @@ export default function LandlordDashboardPage() {
         amenities: string[];
         imageUrl?: string;
         categoryId: string;
-        status?:
-          | "AVAILABLE"
-          | "RENTED"
-          | "UNAVAILABLE";
+        status?: "AVAILABLE" | "RENTED" | "UNAVAILABLE";
       } = {
         title: formData.title.trim(),
-        description:
-          formData.description.trim(),
-        location:
-          formData.location.trim(),
+        description: formData.description.trim(),
+        location: formData.location.trim(),
         price,
-        propertyType:
-          formData.propertyType.trim(),
+        propertyType: formData.propertyType.trim(),
         bedrooms,
         bathrooms,
         amenities,
@@ -528,8 +447,7 @@ export default function LandlordDashboardPage() {
       };
 
       if (formData.imageUrl.trim()) {
-        payload.imageUrl =
-          formData.imageUrl.trim();
+        payload.imageUrl = formData.imageUrl.trim();
       }
 
       if (editingProperty) {
@@ -540,21 +458,15 @@ export default function LandlordDashboardPage() {
         ? `/api/landlord/properties/${editingProperty.id}`
         : "/api/landlord/properties";
 
-      const method = editingProperty
-        ? "PATCH"
-        : "POST";
+      const method = editingProperty ? "PATCH" : "POST";
 
-      const response = await fetch(
-        endpoint,
-        {
-          method,
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await response.json();
 
@@ -562,9 +474,7 @@ export default function LandlordDashboardPage() {
         throw new Error(
           data.message ||
             `Unable to ${
-              editingProperty
-                ? "update"
-                : "create"
+              editingProperty ? "update" : "create"
             } property.`
         );
       }
@@ -579,10 +489,7 @@ export default function LandlordDashboardPage() {
 
       await refetchProperties();
     } catch (error) {
-      console.error(
-        "Property form error:",
-        error
-      );
+      console.error("Property form error:", error);
 
       setPropertyError(
         error instanceof Error
@@ -594,9 +501,7 @@ export default function LandlordDashboardPage() {
     }
   };
 
-  const handleDeleteProperty = async (
-    property: Property
-  ) => {
+  const handleDeleteProperty = async (property: Property) => {
     const confirmed = window.confirm(
       `Are you sure you want to delete "${property.title}"? This action cannot be undone.`
     );
@@ -621,8 +526,7 @@ export default function LandlordDashboardPage() {
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.message ||
-            "Unable to delete property."
+          data.message || "Unable to delete property."
         );
       }
 
@@ -632,10 +536,7 @@ export default function LandlordDashboardPage() {
 
       await refetchProperties();
     } catch (error) {
-      console.error(
-        "Delete property error:",
-        error
-      );
+      console.error("Delete property error:", error);
 
       setPropertyError(
         error instanceof Error
@@ -652,9 +553,7 @@ export default function LandlordDashboardPage() {
     status: "APPROVED" | "REJECTED"
   ) => {
     const action =
-      status === "APPROVED"
-        ? "approve"
-        : "reject";
+      status === "APPROVED" ? "approve" : "reject";
 
     const confirmed = window.confirm(
       `Are you sure you want to ${action} this rental request?`
@@ -673,8 +572,7 @@ export default function LandlordDashboardPage() {
         {
           method: "PATCH",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             status,
@@ -723,30 +621,21 @@ export default function LandlordDashboardPage() {
         method: "POST",
       });
 
-      window.location.href =
-        "/auth/login";
+      window.location.href = "/auth/login";
     } catch (error) {
-      console.error(
-        "Logout error:",
-        error
-      );
+      console.error("Logout error:", error);
     }
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString(
-      "en-US",
-      {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      }
-    );
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   };
 
-  const formatPrice = (
-    price: number | string
-  ) => {
+  const formatPrice = (price: number | string) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -766,9 +655,6 @@ export default function LandlordDashboardPage() {
 
       case "REJECTED":
         return "bg-red-50 text-red-700 border-red-200";
-
-      case "CANCELLED":
-        return "bg-gray-100 text-gray-600 border-gray-200";
 
       default:
         return "bg-gray-100 text-gray-600 border-gray-200";
@@ -803,9 +689,7 @@ export default function LandlordDashboardPage() {
             <div className="h-5 w-96 rounded bg-gray-200" />
 
             <div className="grid gap-5 md:grid-cols-4">
-              {Array.from({
-                length: 4,
-              }).map((_, index) => (
+              {Array.from({ length: 4 }).map((_, index) => (
                 <div
                   key={index}
                   className="h-32 rounded-2xl bg-gray-200"
@@ -833,13 +717,12 @@ export default function LandlordDashboardPage() {
             </p>
 
             <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-              Welcome,{" "}
-              {user?.name || "Landlord"} 👋
+              Welcome, {user?.name || "Landlord"} 👋
             </h1>
 
             <p className="mt-2 text-gray-600">
-              Manage your rental requests and
-              properties from one place.
+              Manage your rental requests and properties
+              from one place.
             </p>
           </div>
 
@@ -877,9 +760,7 @@ export default function LandlordDashboardPage() {
             </p>
 
             <button
-              onClick={() =>
-                setPropertyError("")
-              }
+              onClick={() => setPropertyError("")}
               className="text-red-600 hover:text-red-800"
             >
               ✕
@@ -895,9 +776,7 @@ export default function LandlordDashboardPage() {
             </p>
 
             <button
-              onClick={() =>
-                setSuccessMessage("")
-              }
+              onClick={() => setSuccessMessage("")}
               className="text-emerald-600 hover:text-emerald-800"
             >
               ✕
@@ -1001,8 +880,7 @@ export default function LandlordDashboardPage() {
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Add, edit and manage your rental
-                properties.
+                Add, edit and manage your rental properties.
               </p>
             </div>
 
@@ -1073,8 +951,8 @@ export default function LandlordDashboardPage() {
               </h3>
 
               <p className="mx-auto mt-2 max-w-md text-gray-500">
-                Add your first property to start
-                receiving rental requests.
+                Add your first property to start receiving
+                rental requests.
               </p>
 
               <button
@@ -1128,9 +1006,7 @@ export default function LandlordDashboardPage() {
                       </div>
 
                       <p className="shrink-0 text-lg font-bold text-blue-600">
-                        {formatPrice(
-                          property.price
-                        )}
+                        {formatPrice(property.price)}
                       </p>
                     </div>
 
@@ -1140,18 +1016,15 @@ export default function LandlordDashboardPage() {
 
                     <div className="mb-4 flex flex-wrap gap-2 text-xs font-medium text-gray-600">
                       <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🛏️ {property.bedrooms}{" "}
-                        Beds
+                        🛏️ {property.bedrooms} Beds
                       </span>
 
                       <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🛁 {property.bathrooms}{" "}
-                        Baths
+                        🛁 {property.bathrooms} Baths
                       </span>
 
                       <span className="rounded-lg bg-gray-100 px-2.5 py-1.5">
-                        🏢{" "}
-                        {property.propertyType}
+                        🏢 {property.propertyType}
                       </span>
                     </div>
 
@@ -1161,14 +1034,12 @@ export default function LandlordDashboardPage() {
                       </p>
 
                       <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                        {property.category
-                          ?.name ||
+                        {property.category?.name ||
                           "Uncategorized"}
                       </span>
                     </div>
 
-                    {property.amenities?.length >
-                      0 && (
+                    {property.amenities?.length > 0 && (
                       <div className="mb-5">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
                           Amenities
@@ -1177,32 +1048,19 @@ export default function LandlordDashboardPage() {
                         <div className="flex flex-wrap gap-1.5">
                           {property.amenities
                             .slice(0, 5)
-                            .map(
-                              (
-                                amenity
-                              ) => (
-                                <span
-                                  key={
-                                    amenity
-                                  }
-                                  className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600"
-                                >
-                                  {
-                                    amenity
-                                  }
-                                </span>
-                              )
-                            )}
+                            .map((amenity) => (
+                              <span
+                                key={amenity}
+                                className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600"
+                              >
+                                {amenity}
+                              </span>
+                            ))}
 
-                          {property.amenities
-                            .length >
-                            5 && (
+                          {property.amenities.length > 5 && (
                             <span className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-500">
                               +
-                              {property
-                                .amenities
-                                .length -
-                                5}{" "}
+                              {property.amenities.length - 5}{" "}
                               more
                             </span>
                           )}
@@ -1214,13 +1072,9 @@ export default function LandlordDashboardPage() {
                     <div className="flex gap-3 border-t border-gray-100 pt-4">
                       <button
                         onClick={() =>
-                          openEditPropertyForm(
-                            property
-                          )
+                          openEditPropertyForm(property)
                         }
-                        disabled={
-                          propertyActionLoading
-                        }
+                        disabled={propertyActionLoading}
                         className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Edit
@@ -1228,13 +1082,9 @@ export default function LandlordDashboardPage() {
 
                       <button
                         onClick={() =>
-                          void handleDeleteProperty(
-                            property
-                          )
+                          void handleDeleteProperty(property)
                         }
-                        disabled={
-                          propertyActionLoading
-                        }
+                        disabled={propertyActionLoading}
                         className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Delete
@@ -1276,232 +1126,202 @@ export default function LandlordDashboardPage() {
 
           {isRequestsLoading ? (
             <div className="space-y-5">
-              {Array.from({
-                length: 3,
-              }).map((_, index) => (
+              {Array.from({ length: 3 }).map((_, index) => (
                 <div
                   key={index}
                   className="h-64 animate-pulse rounded-2xl bg-white shadow-sm"
                 />
               ))}
             </div>
-          ) : rentalRequests.length ===
-            0 ? (
+          ) : activeRequests.length === 0 ? (
             <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-sm">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-2xl">
                 🏠
               </div>
 
               <h3 className="text-xl font-bold text-gray-900">
-                No rental requests yet
+                No active rental requests
               </h3>
 
               <p className="mx-auto mt-2 max-w-md text-gray-500">
-                When tenants request one of your
-                properties, their applications will
+                When tenants request one of your available
+                properties, their active applications will
                 appear here.
               </p>
             </div>
           ) : (
             <div className="space-y-5">
-              {rentalRequests.map(
-                (request) => (
-                  <article
-                    key={request.id}
-                    className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
-                  >
-                    <div className="p-6">
-                      {/* Request Header */}
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                          <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
-                                request.status
-                              )}`}
-                            >
-                              {request.status}
-                            </span>
+              {activeRequests.map((request) => (
+                <article
+                  key={request.id}
+                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                >
+                  <div className="p-6">
+                    {/* Request Header */}
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
+                              request.status
+                            )}`}
+                          >
+                            {request.status}
+                          </span>
 
-                            <span className="text-xs text-gray-400">
-                              Request ID:{" "}
-                              {request.id.slice(
-                                0,
-                                8
-                              )}
-                            </span>
-                          </div>
-
-                          <h3 className="text-xl font-bold text-gray-900">
-                            {request.property.title}
-                          </h3>
-
-                          <p className="mt-1 text-sm text-gray-500">
-                            📍{" "}
-                            {request.property.location}
-                          </p>
+                          <span className="text-xs text-gray-400">
+                            Request ID:{" "}
+                            {request.id.slice(0, 8)}
+                          </span>
                         </div>
 
-                        <div className="text-left lg:text-right">
-                          <p className="text-2xl font-bold text-blue-600">
-                            {formatPrice(
-                              request.property.price
-                            )}
-                          </p>
+                        <h3 className="text-xl font-bold text-gray-900">
+                          {request.property.title}
+                        </h3>
 
-                          <p className="text-sm text-gray-500">
-                            per month
-                          </p>
-                        </div>
+                        <p className="mt-1 text-sm text-gray-500">
+                          📍 {request.property.location}
+                        </p>
                       </div>
 
-                      {/* Request Details */}
-                      <div className="mt-6 grid gap-5 border-t border-gray-100 pt-6 md:grid-cols-2 lg:grid-cols-4">
-                        {/* Tenant */}
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Tenant
-                          </p>
+                      <div className="text-left lg:text-right">
+                        <p className="text-2xl font-bold text-blue-600">
+                          {formatPrice(
+                            request.property.price
+                          )}
+                        </p>
 
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {request.tenant.name}
-                          </p>
-
-                          <p className="mt-1 break-all text-sm text-gray-500">
-                            {request.tenant.email}
-                          </p>
-                        </div>
-
-                        {/* Move-in Date */}
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Move-in Date
-                          </p>
-
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {formatDate(
-                              request.moveInDate
-                            )}
-                          </p>
-                        </div>
-
-                        {/* Property Status */}
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Property Status
-                          </p>
-
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {
-                              request
-                                .property
-                                .status
-                            }
-                          </p>
-                        </div>
-
-                        {/* Requested On */}
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Requested On
-                          </p>
-
-                          <p className="mt-1 font-semibold text-gray-900">
-                            {formatDate(
-                              request.createdAt
-                            )}
-                          </p>
-                        </div>
+                        <p className="text-sm text-gray-500">
+                          per month
+                        </p>
                       </div>
-
-                      {/* Tenant Message */}
-                      {request.message && (
-                        <div className="mt-6 rounded-xl bg-gray-50 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Tenant Message
-                          </p>
-
-                          <p className="mt-2 text-sm leading-6 text-gray-700">
-                            {request.message}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Pending Actions */}
-                      {request.status ===
-                        "PENDING" && (
-                        <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:justify-end">
-                          <button
-                            onClick={() =>
-                              void handleStatusUpdate(
-                                request.id,
-                                "REJECTED"
-                              )
-                            }
-                            disabled={
-                              actionLoadingId ===
-                              request.id
-                            }
-                            className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {actionLoadingId ===
-                            request.id
-                              ? "Processing..."
-                              : "Reject Request"}
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              void handleStatusUpdate(
-                                request.id,
-                                "APPROVED"
-                              )
-                            }
-                            disabled={
-                              actionLoadingId ===
-                              request.id
-                            }
-                            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {actionLoadingId ===
-                            request.id
-                              ? "Processing..."
-                              : "Approve Request"}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Approved */}
-                      {request.status ===
-                        "APPROVED" && (
-                        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                          ✓ This rental request has
-                          been approved. The property
-                          is now marked as rented.
-                        </div>
-                      )}
-
-                      {/* Rejected */}
-                      {request.status ===
-                        "REJECTED" && (
-                        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                          This rental request has been
-                          rejected.
-                        </div>
-                      )}
-
-                      {/* Cancelled */}
-                      {request.status ===
-                        "CANCELLED" && (
-                        <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
-                          This rental request was
-                          cancelled by the tenant.
-                        </div>
-                      )}
                     </div>
-                  </article>
-                )
-              )}
+
+                    {/* Request Details */}
+                    <div className="mt-6 grid gap-5 border-t border-gray-100 pt-6 md:grid-cols-2 lg:grid-cols-4">
+                      {/* Tenant */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Tenant
+                        </p>
+
+                        <p className="mt-1 font-semibold text-gray-900">
+                          {request.tenant.name}
+                        </p>
+
+                        <p className="mt-1 break-all text-sm text-gray-500">
+                          {request.tenant.email}
+                        </p>
+                      </div>
+
+                      {/* Move-in Date */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Move-in Date
+                        </p>
+
+                        <p className="mt-1 font-semibold text-gray-900">
+                          {formatDate(
+                            request.moveInDate
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Property Status */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Property Status
+                        </p>
+
+                        <p className="mt-1 font-semibold text-gray-900">
+                          {request.property.status}
+                        </p>
+                      </div>
+
+                      {/* Requested On */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Requested On
+                        </p>
+
+                        <p className="mt-1 font-semibold text-gray-900">
+                          {formatDate(
+                            request.createdAt
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Tenant Message */}
+                    {request.message && (
+                      <div className="mt-6 rounded-xl bg-gray-50 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                          Tenant Message
+                        </p>
+
+                        <p className="mt-2 text-sm leading-6 text-gray-700">
+                          {request.message}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Pending Actions */}
+                    {request.status === "PENDING" && (
+                      <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-6 sm:flex-row sm:justify-end">
+                        <button
+                          onClick={() =>
+                            void handleStatusUpdate(
+                              request.id,
+                              "REJECTED"
+                            )
+                          }
+                          disabled={
+                            actionLoadingId === request.id
+                          }
+                          className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionLoadingId === request.id
+                            ? "Processing..."
+                            : "Reject Request"}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            void handleStatusUpdate(
+                              request.id,
+                              "APPROVED"
+                            )
+                          }
+                          disabled={
+                            actionLoadingId === request.id
+                          }
+                          className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionLoadingId === request.id
+                            ? "Processing..."
+                            : "Approve Request"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Approved */}
+                    {request.status === "APPROVED" && (
+                      <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                        ✓ This rental request has been
+                        approved. The property is now marked
+                        as rented.
+                      </div>
+                    )}
+
+                    {/* Rejected */}
+                    {request.status === "REJECTED" && (
+                      <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                        This rental request has been rejected.
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </section>
@@ -1530,9 +1350,7 @@ export default function LandlordDashboardPage() {
               <button
                 type="button"
                 onClick={resetPropertyForm}
-                disabled={
-                  propertyActionLoading
-                }
+                disabled={propertyActionLoading}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
               >
                 ✕
@@ -1633,9 +1451,7 @@ export default function LandlordDashboardPage() {
                   </label>
 
                   <select
-                    value={
-                      formData.propertyType
-                    }
+                    value={formData.propertyType}
                     onChange={(event) =>
                       handleFormChange(
                         "propertyType",
@@ -1647,27 +1463,24 @@ export default function LandlordDashboardPage() {
                     <option value="">
                       Select property type
                     </option>
+
                     <option value="Apartment">
                       Apartment
                     </option>
-                    <option value="House">
-                      House
-                    </option>
+
+                    <option value="House">House</option>
+
                     <option value="Studio">
                       Studio
                     </option>
-                    <option value="Villa">
-                      Villa
-                    </option>
-                    <option value="Condo">
-                      Condo
-                    </option>
-                    <option value="Duplex">
-                      Duplex
-                    </option>
-                    <option value="Room">
-                      Room
-                    </option>
+
+                    <option value="Villa">Villa</option>
+
+                    <option value="Condo">Condo</option>
+
+                    <option value="Duplex">Duplex</option>
+
+                    <option value="Room">Room</option>
                   </select>
                 </div>
 
@@ -1678,18 +1491,14 @@ export default function LandlordDashboardPage() {
                   </label>
 
                   <select
-                    value={
-                      formData.categoryId
-                    }
+                    value={formData.categoryId}
                     onChange={(event) =>
                       handleFormChange(
                         "categoryId",
                         event.target.value
                       )
                     }
-                    disabled={
-                      isCategoriesLoading
-                    }
+                    disabled={isCategoriesLoading}
                     className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
                   >
                     <option value="">
@@ -1698,16 +1507,14 @@ export default function LandlordDashboardPage() {
                         : "Select category"}
                     </option>
 
-                    {categories.map(
-                      (category) => (
-                        <option
-                          key={category.id}
-                          value={category.id}
-                        >
-                          {category.name}
-                        </option>
-                      )
-                    )}
+                    {categories.map((category) => (
+                      <option
+                        key={category.id}
+                        value={category.id}
+                      >
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1721,9 +1528,7 @@ export default function LandlordDashboardPage() {
                     type="number"
                     min="0"
                     step="1"
-                    value={
-                      formData.bedrooms
-                    }
+                    value={formData.bedrooms}
                     onChange={(event) =>
                       handleFormChange(
                         "bedrooms",
@@ -1744,9 +1549,7 @@ export default function LandlordDashboardPage() {
                     type="number"
                     min="0"
                     step="1"
-                    value={
-                      formData.bathrooms
-                    }
+                    value={formData.bathrooms}
                     onChange={(event) =>
                       handleFormChange(
                         "bathrooms",
@@ -1765,9 +1568,7 @@ export default function LandlordDashboardPage() {
 
                   <input
                     type="url"
-                    value={
-                      formData.imageUrl
-                    }
+                    value={formData.imageUrl}
                     onChange={(event) =>
                       handleFormChange(
                         "imageUrl",
@@ -1779,8 +1580,8 @@ export default function LandlordDashboardPage() {
                   />
 
                   <p className="mt-1.5 text-xs text-gray-400">
-                    Optional. Use a publicly accessible
-                    image URL.
+                    Optional. Use a publicly accessible image
+                    URL.
                   </p>
                 </div>
 
@@ -1792,9 +1593,7 @@ export default function LandlordDashboardPage() {
 
                   <input
                     type="text"
-                    value={
-                      formData.amenities
-                    }
+                    value={formData.amenities}
                     onChange={(event) =>
                       handleFormChange(
                         "amenities",
@@ -1848,9 +1647,7 @@ export default function LandlordDashboardPage() {
                 <button
                   type="button"
                   onClick={resetPropertyForm}
-                  disabled={
-                    propertyActionLoading
-                  }
+                  disabled={propertyActionLoading}
                   className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
@@ -1858,9 +1655,7 @@ export default function LandlordDashboardPage() {
 
                 <button
                   type="submit"
-                  disabled={
-                    propertyActionLoading
-                  }
+                  disabled={propertyActionLoading}
                   className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {propertyActionLoading
