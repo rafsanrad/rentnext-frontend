@@ -13,7 +13,7 @@ export default function PaymentSuccessPage() {
         </p>
 
         <a
-          href="/tenant-dashboard"
+          href="/tenant/dashboard"
           className="inline-block rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition hover:bg-blue-700"
         >
           Back to Dashboard
