@@ -118,20 +118,42 @@ export default function Home() {
 
             {/* Hero Property Preview */}
             <div className="relative">
-              <div className="rounded-3xl bg-linear-to-br from-blue-600 to-cyan-500 p-6 shadow-xl sm:p-8">
-                <div className="rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
-                  {/* Property Image Placeholder */}
-                  <div className="flex h-52 items-center justify-center rounded-xl bg-slate-200">
-                    <span className="text-sm font-medium text-slate-500">
-                      Property Image
-                    </span>
+              {/* Decorative Background */}
+              <div className="absolute -inset-4 rounded-[2rem] bg-linear-to-br from-blue-100 via-cyan-50 to-blue-100 blur-2xl" />
+
+              <div className="relative rounded-3xl bg-linear-to-br from-blue-600 to-cyan-500 p-4 shadow-2xl sm:p-6">
+                <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
+                  {/* Property Image */}
+                  <div className="relative h-64 overflow-hidden sm:h-72">
+                    <img
+                      src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=85"
+                      alt="Modern luxury rental house"
+                      className="h-full w-full object-cover transition duration-500 hover:scale-105"
+                    />
+
+                    {/* Image Overlay */}
+                    <div className="absolute inset-0 bg-linear-to-t from-black/50 via-transparent to-transparent" />
+
+                    {/* Featured Badge */}
+                    <div className="absolute left-4 top-4">
+                      <span className="rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-blue-600 shadow-lg backdrop-blur">
+                        Featured Property
+                      </span>
+                    </div>
+
+                    {/* Image Bottom Text */}
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <p className="text-sm font-medium text-white/90">
+                        Premium rental living
+                      </p>
+                    </div>
                   </div>
 
                   {/* Property Information */}
-                  <div className="mt-5">
+                  <div className="p-5 sm:p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">
+                        <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
                           Modern Family Apartment
                         </h3>
 
@@ -145,7 +167,15 @@ export default function Home() {
                       </span>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between">
+                    {/* Property Features */}
+                    <div className="mt-5 flex flex-wrap gap-4 text-sm text-slate-500">
+                      <span>🛏 3 Bedrooms</span>
+                      <span>🛁 2 Bathrooms</span>
+                      <span>📐 1,450 sq.ft.</span>
+                    </div>
+
+                    {/* Price + View */}
+                    <div className="mt-6 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-xl font-bold text-blue-600">
                           ৳35,000
